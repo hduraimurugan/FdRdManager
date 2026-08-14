@@ -61,6 +61,7 @@ interface RawState {
   editDraft: Draft | null;
   fdPayoutOpen: boolean;
   fdRenewalOpen: boolean;
+  fdStatementsOpen: boolean;
   rdDetailsOpen: boolean;
   fdCalc: FdCalcState;
   rdCalc: RdCalcState;
@@ -124,6 +125,7 @@ const initialState: RawState = {
   editDraft: null,
   fdPayoutOpen: false,
   fdRenewalOpen: false,
+  fdStatementsOpen: false,
   rdDetailsOpen: false,
   fdCalc: initialFdCalc,
   rdCalc: initialRdCalc,
@@ -157,6 +159,7 @@ type Action =
   | { type: 'RENEW'; kind: 'FD' | 'RD'; id: string; newStartDate: string }
   | { type: 'TOGGLE_FD_PAYOUT' }
   | { type: 'TOGGLE_FD_RENEWAL' }
+  | { type: 'TOGGLE_FD_STATEMENTS' }
   | { type: 'TOGGLE_RD_DETAILS' }
   | { type: 'SET_FD_CALC_FIELD'; field: keyof FdCalcState; value: any }
   | { type: 'SET_RD_CALC_FIELD'; field: keyof RdCalcState; value: any };
@@ -239,6 +242,8 @@ function reducer(state: RawState, action: Action): RawState {
       return { ...state, fdPayoutOpen: !state.fdPayoutOpen };
     case 'TOGGLE_FD_RENEWAL':
       return { ...state, fdRenewalOpen: !state.fdRenewalOpen };
+    case 'TOGGLE_FD_STATEMENTS':
+      return { ...state, fdStatementsOpen: !state.fdStatementsOpen };
     case 'TOGGLE_RD_DETAILS':
       return { ...state, rdDetailsOpen: !state.rdDetailsOpen };
     case 'SET_FD_CALC_FIELD':
@@ -344,6 +349,7 @@ export interface AppActions {
   openRdCalculator: () => void;
   toggleFdPayout: () => void;
   toggleFdRenewal: () => void;
+  toggleFdStatements: () => void;
   toggleRdDetails: () => void;
   askConfirm: (action: ConfirmDialogState['action'], kind: 'FD' | 'RD', id: string, title: string, message: string, confirmLabel: string) => void;
   closeConfirm: () => void;
@@ -452,6 +458,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     openRdCalculator: () => navigate('RdCalculator'),
     toggleFdPayout: () => dispatch({ type: 'TOGGLE_FD_PAYOUT' }),
     toggleFdRenewal: () => dispatch({ type: 'TOGGLE_FD_RENEWAL' }),
+    toggleFdStatements: () => dispatch({ type: 'TOGGLE_FD_STATEMENTS' }),
     toggleRdDetails: () => dispatch({ type: 'TOGGLE_RD_DETAILS' }),
     askConfirm: (action, kind, id, title, message, confirmLabel) =>
       dispatch({ type: 'ASK_CONFIRM', dialog: { action, kind, id, title, message, confirmLabel } }),

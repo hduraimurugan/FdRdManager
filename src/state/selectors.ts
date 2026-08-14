@@ -109,6 +109,42 @@ export function decorateFD(fd: FixedDeposit, theme: ThemeTokens): DecoratedFD {
   };
 }
 
+// ---------------------------------------------------------------------------
+// FD statements — past interest payouts already received, derived on the fly
+// from the payout schedule (no separate ledger is persisted).
+// ---------------------------------------------------------------------------
+const PAYOUT_FREQ_MONTHS: Record<string, number> = { Monthly: 1, Quarterly: 3, 'Half-Yearly': 6, Yearly: 12 };
+const PAYOUT_FREQ_N: Record<string, number> = { Monthly: 12, Quarterly: 4, 'Half-Yearly': 2, Yearly: 1 };
+
+export interface FdStatementEntry {
+  date: string;
+  dateLabel: string;
+  amount: number;
+  amountFmt: string;
+  index: number;
+}
+
+export function fdStatements(fd: FixedDeposit): FdStatementEntry[] {
+  if (!fd.isPayoutFD) return [];
+  const periodMonths = PAYOUT_FREQ_MONTHS[fd.interestPayoutMode] || 3;
+  const n = PAYOUT_FREQ_N[fd.compoundingFrequency] || 4;
+  const perPayout = Math.round((fd.principalAmount * (fd.interestRate / 100)) / n);
+  const maturity = new Date(fd.maturityDate);
+  const now = today();
+  const cutoff = now < maturity ? now : maturity;
+  const entries: FdStatementEntry[] = [];
+  const scheduled = new Date(fd.startDate);
+  let idx = 0;
+  while (true) {
+    scheduled.setMonth(scheduled.getMonth() + periodMonths);
+    if (scheduled > cutoff) break;
+    idx += 1;
+    const iso = scheduled.toISOString().slice(0, 10);
+    entries.push({ date: iso, dateLabel: formatDate(iso), amount: perPayout, amountFmt: formatINR(perPayout, { signed: true }), index: idx });
+  }
+  return entries.reverse();
+}
+
 export interface DecoratedRD extends RecurringDeposit {
   kind: 'RD';
   number: string;

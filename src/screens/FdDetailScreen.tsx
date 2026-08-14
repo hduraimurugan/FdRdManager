@@ -5,7 +5,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
-import { decorateFD } from '../state/selectors';
+import { decorateFD, fdStatements } from '../state/selectors';
 import { formatINR, formatDate } from '../data/portfolioData';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { RootStackParamList } from '../navigation/types';
@@ -24,6 +24,7 @@ export default function FdDetailScreen({ route }: Props) {
   const actions = useAppActions();
   const raw = state.fdList.find(f => f.id === route.params.id);
   const fd = useMemo(() => (raw ? decorateFD(raw, theme) : null), [raw, theme]);
+  const statements = useMemo(() => (raw ? fdStatements(raw) : []), [raw]);
 
   if (!fd) {
     return (
@@ -142,6 +143,39 @@ export default function FdDetailScreen({ route }: Props) {
             )}
           </Card>
         </Pressable>
+
+        {fd.isPayoutFD && (
+          <Pressable onPress={actions.toggleFdStatements}>
+            <Card>
+              <View style={styles.collapseHeader}>
+                <Text style={[styles.collapseTitle, { color: theme.text }]}>Statements</Text>
+                <View style={{ transform: [{ rotate: state.fdStatementsOpen ? '180deg' : '0deg' }] }}>
+                  <IconChevronDown color={theme.textFaint} />
+                </View>
+              </View>
+              {state.fdStatementsOpen && (
+                <View style={styles.collapseBody}>
+                  {statements.length === 0 ? (
+                    <Text style={[styles.emptyText, { color: theme.textFaint }]}>No payouts received yet</Text>
+                  ) : (
+                    statements.map((s, i) => (
+                      <View
+                        key={s.date}
+                        style={[styles.statementRow, i > 0 && { borderTopWidth: 1, borderColor: theme.divider }]}
+                      >
+                        <View>
+                          <Text style={[styles.statementDate, { color: theme.text }]}>{s.dateLabel}</Text>
+                          <Text style={[styles.statementSub, { color: theme.textFaint }]}>Interest payout · #{s.index}</Text>
+                        </View>
+                        <Text style={[styles.statementAmount, { color: theme.success }]}>{s.amountFmt}</Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+            </Card>
+          </Pressable>
+        )}
 
         <Pressable onPress={actions.toggleFdRenewal}>
           <Card>
@@ -330,6 +364,29 @@ const styles = StyleSheet.create({
   kvValueAccent: {
     fontFamily: fontFamily.semibold,
     fontSize: 13,
+  },
+  emptyText: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+  },
+  statementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  statementDate: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13.5,
+  },
+  statementSub: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  statementAmount: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
   },
   actionRow: {
     flexDirection: 'row',
