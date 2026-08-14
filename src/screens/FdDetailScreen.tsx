@@ -11,7 +11,7 @@ import { GRADIENT_ANGLE } from '../theme/colors';
 import { RootStackParamList } from '../navigation/types';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
-import Avatar from '../components/Avatar';
+import BankLogo from '../components/BankLogo';
 import StatusBadge from '../components/StatusBadge';
 import ProgressBar from '../components/ProgressBar';
 import { IconChevronDown } from '../components/icons/Icons';
@@ -42,7 +42,7 @@ export default function FdDetailScreen({ route }: Props) {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
-            <Avatar bg={fd.avatarBg} fg={fd.avatarFg} initials={fd.bankInitials} size={44} />
+            <BankLogo bankName={fd.bankName} size={44} />
             <View>
               <Text style={[styles.bankName, { color: theme.text }]}>{fd.bankName}</Text>
               <Text style={[styles.meta, { color: theme.textFaint }]}>

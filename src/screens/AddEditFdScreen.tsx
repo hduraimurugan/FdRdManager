@@ -14,6 +14,7 @@ import TopAppBar from '../components/TopAppBar';
 import FormField from '../components/FormField';
 import FormSelect from '../components/FormSelect';
 import DateField from '../components/DateField';
+import BankLogo from '../components/BankLogo';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddEditFD'>;
 
@@ -35,7 +36,14 @@ export default function AddEditFdScreen({ route }: Props) {
         <Card style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Basic details</Text>
           <FormField label="FD number" value={String(draft.fdNumber ?? '')} onChangeText={set('fdNumber')} />
-          <FormSelect label="Bank" value={draft.bankName ?? ''} options={BANKS} onChange={set('bankName')} placeholder="Select bank" />
+          <FormSelect
+            label="Bank"
+            value={draft.bankName ?? ''}
+            options={BANKS}
+            onChange={set('bankName')}
+            placeholder="Select bank"
+            renderOptionIcon={bank => <BankLogo bankName={bank} size={28} />}
+          />
           <FormField label="Branch" value={String(draft.branch ?? '')} onChangeText={set('branch')} />
           <FormField label="Bank account number" value={String(draft.bankAccountNumber ?? '')} onChangeText={set('bankAccountNumber')} keyboardType="number-pad" />
           <FormField label="Customer ID" value={String(draft.customerId ?? '')} onChangeText={set('customerId')} />

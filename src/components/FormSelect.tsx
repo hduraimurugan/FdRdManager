@@ -10,12 +10,14 @@ export default function FormSelect({
   options,
   onChange,
   placeholder = 'Select',
+  renderOptionIcon,
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (value: string) => void;
   placeholder?: string;
+  renderOptionIcon?: (option: string) => React.ReactNode;
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
@@ -24,9 +26,12 @@ export default function FormSelect({
     <View style={styles.wrap}>
       <Text style={[styles.label, { color: theme.textMuted }]}>{label}</Text>
       <Pressable onPress={() => setOpen(true)} style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
-        <Text style={[styles.value, { color: value ? theme.text : theme.textFaint }]} numberOfLines={1}>
-          {value || placeholder}
-        </Text>
+        <View style={styles.optionLeft}>
+          {value ? renderOptionIcon?.(value) : null}
+          <Text style={[styles.value, { color: value ? theme.text : theme.textFaint }]} numberOfLines={1}>
+            {value || placeholder}
+          </Text>
+        </View>
         <IconChevronDown size={15} color={theme.textFaint} />
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -45,7 +50,10 @@ export default function FormSelect({
                   }}
                   style={[styles.option, { borderColor: theme.divider }]}
                 >
-                  <Text style={[styles.optionText, { color: theme.text }]}>{opt}</Text>
+                  <View style={styles.optionLeft}>
+                    {renderOptionIcon?.(opt)}
+                    <Text style={[styles.optionText, { color: theme.text }]}>{opt}</Text>
+                  </View>
                   {opt === value && <IconCheck size={16} color={theme.accent} />}
                 </Pressable>
               ))}
@@ -78,6 +86,13 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     fontSize: 14,
     flex: 1,
+  },
+  optionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
   },
   overlay: {
     flex: 1,

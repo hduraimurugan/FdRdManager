@@ -7,7 +7,7 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { decorateFD, decorateRD, filteredSorted, DecoratedFD, DecoratedRD } from '../state/selectors';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import Card from '../components/Card';
-import Avatar from '../components/Avatar';
+import BankLogo from '../components/BankLogo';
 import StatusBadge from '../components/StatusBadge';
 import ProgressBar from '../components/ProgressBar';
 import SkeletonBlock from '../components/SkeletonBlock';
@@ -119,7 +119,7 @@ export default function PortfolioScreen() {
               <Card style={styles.itemCard}>
                 <View style={styles.itemHeader}>
                   <View style={styles.itemHeaderLeft}>
-                    <Avatar bg={item.avatarBg} fg={item.avatarFg} initials={item.bankInitials} />
+                    <BankLogo bankName={item.bankName} />
                     <View style={styles.flexShrink}>
                       <Text style={[styles.itemBank, { color: theme.text }]}>{item.bankName}</Text>
                       <Text style={[styles.itemMeta, { color: theme.textFaint }]}>

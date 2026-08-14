@@ -6,7 +6,8 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { payoutGroups } from '../state/selectors';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
-import { IconBank, IconClock } from '../components/icons/Icons';
+import BankLogo from '../components/BankLogo';
+import { IconClock } from '../components/icons/Icons';
 
 export default function PayoutsScreen() {
   const theme = useTheme();
@@ -66,8 +67,8 @@ export default function PayoutsScreen() {
               {sec.items.map(e => (
                 <Pressable key={e.id} onPress={() => openRecord(e.kind, e.recordId)}>
                   <Card style={styles.eventCard}>
-                    <View style={[styles.eventIcon, { backgroundColor: e.iconBg }]}>
-                      <IconBank color={e.iconFg} />
+                    <View style={styles.eventIconWrap}>
+                      <BankLogo bankName={e.bank} />
                       <View style={[styles.kindBadge, { backgroundColor: e.kindBadgeBg }]}>
                         <Text style={styles.kindBadgeText}>{e.kind}</Text>
                       </View>
@@ -146,12 +147,7 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     flexShrink: 0,
   },
-  eventIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
+  eventIconWrap: {
     flexShrink: 0,
   },
   kindBadge: {

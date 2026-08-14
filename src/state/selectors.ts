@@ -66,9 +66,6 @@ export function statusColors(theme: ThemeTokens, status: string, urgency: Urgenc
 // ---------------------------------------------------------------------------
 export interface DecoratedFD extends FixedDeposit {
   kind: 'FD';
-  avatarBg: string;
-  avatarFg: string;
-  bankInitials: string;
   number: string;
   typeLabel: string;
   amountFmt: string;
@@ -98,7 +95,6 @@ export function decorateFD(fd: FixedDeposit, theme: ThemeTokens): DecoratedFD {
   return {
     ...fd,
     kind: 'FD',
-    ...bankAvatar(fd.bankName),
     number: fd.fdNumber,
     typeLabel: fd.fdType,
     amountFmt: formatINR(fd.principalAmount),
@@ -115,9 +111,6 @@ export function decorateFD(fd: FixedDeposit, theme: ThemeTokens): DecoratedFD {
 
 export interface DecoratedRD extends RecurringDeposit {
   kind: 'RD';
-  avatarBg: string;
-  avatarFg: string;
-  bankInitials: string;
   number: string;
   typeLabel: string;
   amountFmt: string;
@@ -143,7 +136,6 @@ export function decorateRD(rd: RecurringDeposit, theme: ThemeTokens): DecoratedR
   return {
     ...rd,
     kind: 'RD',
-    ...bankAvatar(rd.bankName),
     number: rd.rdNumber,
     typeLabel: rd.rdType,
     amountFmt: formatINR(rd.monthlyInstallment) + '/mo',
@@ -301,8 +293,6 @@ export interface DecoratedEvent extends PortfolioEvent {
   dateLabel: string;
   amountFmt: string;
   amountColor: string;
-  iconBg: string;
-  iconFg: string;
   kindBadgeBg: string;
 }
 
@@ -318,8 +308,6 @@ export function payoutGroups(state: AppState, theme: ThemeTokens) {
       dateLabel: formatDate(e.date, 'short'),
       amountFmt: formatINR(e.amount),
       amountColor: e.type === 'Maturity (P+I)' ? theme.text : e.type === 'Installment Due' ? theme.textMuted : theme.success,
-      iconBg: e.kind === 'FD' ? 'rgba(111,102,232,0.13)' : 'rgba(14,164,114,0.13)',
-      iconFg: e.kind === 'FD' ? theme.accent : theme.success,
       kindBadgeBg: e.kind === 'FD' ? theme.accent : theme.success,
     }));
   const overdue = decorated.filter(e => e.overdue);

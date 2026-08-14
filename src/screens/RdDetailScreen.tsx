@@ -11,7 +11,7 @@ import { GRADIENT_ANGLE } from '../theme/colors';
 import { RootStackParamList } from '../navigation/types';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
-import Avatar from '../components/Avatar';
+import BankLogo from '../components/BankLogo';
 import StatusBadge from '../components/StatusBadge';
 import ProgressBar from '../components/ProgressBar';
 import { IconChevronDown } from '../components/icons/Icons';
@@ -41,7 +41,7 @@ export default function RdDetailScreen({ route }: Props) {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
-            <Avatar bg={rd.avatarBg} fg={rd.avatarFg} initials={rd.bankInitials} size={44} />
+            <BankLogo bankName={rd.bankName} size={44} />
             <View>
               <Text style={[styles.bankName, { color: theme.text }]}>{rd.bankName}</Text>
               <Text style={[styles.meta, { color: theme.textFaint }]}>

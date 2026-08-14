@@ -8,6 +8,7 @@ import { homeMetrics, urgentNotifications, bankDistribution, typeDistribution, p
 import { today } from '../data/derive';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import Card from '../components/Card';
+import BankLogo from '../components/BankLogo';
 import StatPill from '../components/StatPill';
 import DonutChart from '../components/DonutChart';
 import BarChart from '../components/BarChart';
@@ -153,7 +154,10 @@ export default function HomeScreen() {
           {banks.map(b => (
             <View key={b.bank}>
               <View style={styles.rowBetween}>
-                <Text style={[styles.bankLabel, { color: theme.text }]}>{b.bank}</Text>
+                <View style={styles.bankLabelRow}>
+                  <BankLogo bankName={b.bank} size={22} />
+                  <Text style={[styles.bankLabel, { color: theme.text }]}>{b.bank}</Text>
+                </View>
                 <Text style={[styles.bankAmount, { color: theme.textMuted }]}>{b.amountFmt}</Text>
               </View>
               <View style={[styles.barTrack, { backgroundColor: theme.divider }]}>
@@ -319,11 +323,19 @@ const styles = StyleSheet.create({
   rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 5,
+  },
+  bankLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
   },
   bankLabel: {
     fontFamily: fontFamily.medium,
     fontSize: 12.5,
+    flexShrink: 1,
   },
   bankAmount: {
     fontFamily: fontFamily.regular,

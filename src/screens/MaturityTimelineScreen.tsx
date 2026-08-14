@@ -6,6 +6,7 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { timelineMonths } from '../state/selectors';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
+import BankLogo from '../components/BankLogo';
 import EmptyState from '../components/EmptyState';
 import { IconCalendar } from '../components/icons/Icons';
 
@@ -39,11 +40,14 @@ export default function MaturityTimelineScreen() {
                   <View style={[styles.dot, { backgroundColor: it.dotColor, borderColor: theme.bg }]} />
                   <Card style={styles.itemCard}>
                     <View style={styles.itemRow}>
-                      <View style={styles.flexShrink}>
-                        <Text style={[styles.itemTitle, { color: theme.text }]}>
-                          {it.bankName} · {it.number}
-                        </Text>
-                        <Text style={[styles.itemDate, { color: theme.textMuted }]}>{it.dateLabel}</Text>
+                      <View style={styles.itemHeaderLeft}>
+                        <BankLogo bankName={it.bankName} size={30} />
+                        <View style={styles.flexShrink}>
+                          <Text style={[styles.itemTitle, { color: theme.text }]}>
+                            {it.bankName} · {it.number}
+                          </Text>
+                          <Text style={[styles.itemDate, { color: theme.textMuted }]}>{it.dateLabel}</Text>
+                        </View>
                       </View>
                       <Text style={[styles.itemAmount, { color: theme.text }]}>{it.amountFmt}</Text>
                     </View>
@@ -103,6 +107,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+  },
+  itemHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
   },
   flexShrink: {
     flex: 1,
