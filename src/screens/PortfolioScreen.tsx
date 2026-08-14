@@ -13,7 +13,7 @@ import ProgressBar from '../components/ProgressBar';
 import SkeletonBlock from '../components/SkeletonBlock';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
-import { IconSearch, IconFilter } from '../components/icons/Icons';
+import { IconSearch, IconFilter, IconBank, IconRefresh } from '../components/icons/Icons';
 
 type DecoratedItem = DecoratedFD | DecoratedRD;
 
@@ -98,17 +98,19 @@ export default function PortfolioScreen() {
         <FlatList
           data={items}
           keyExtractor={item => item.id}
-          contentContainerStyle={styles.listPad}
+          contentContainerStyle={items.length === 0 ? styles.emptyListPad : styles.listPad}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             hasAnyRecords ? (
-              <EmptyState onAction={actions.resetFilters} />
+              <EmptyState onAction={actions.resetFilters} compact />
             ) : (
               <EmptyState
                 title={`No ${kind}s yet`}
                 subtitle={`Tap the + button to add your first ${kind}.`}
                 actionLabel={`Add ${kind}`}
                 onAction={kind === 'FD' ? actions.openAddFD : actions.openAddRD}
+                gradient={theme.gradientPortfolio}
+                icon={kind === 'FD' ? <IconBank size={30} color="#fff" /> : <IconRefresh size={30} color="#fff" />}
               />
             )
           }
@@ -219,6 +221,14 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 100,
     gap: 10,
+  },
+  emptyListPad: {
+    padding: 16,
+    paddingTop: 14,
+    paddingBottom: 100,
+    gap: 10,
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   itemCard: {
     padding: 0,

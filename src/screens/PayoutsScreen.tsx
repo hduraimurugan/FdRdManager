@@ -19,11 +19,14 @@ export default function PayoutsScreen() {
   const isEmpty = overdue.length === 0 && sections.every(sec => sec.items.length === 0);
   if (isEmpty) {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.emptyContainer}>
         <EmptyState
-          icon={<IconClock size={22} color={theme.textFaint} />}
+          icon={<IconClock size={30} color="#fff" />}
           title="Nothing scheduled"
           subtitle="Payouts and installments from your active deposits will show up here."
+          gradient={theme.gradientPayouts}
+          actionLabel="Add a deposit"
+          onAction={() => actions.setTab('portfolio')}
         />
       </ScrollView>
     );
@@ -93,6 +96,13 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 100,
     gap: 20,
+  },
+  emptyContainer: {
+    padding: 16,
+    paddingBottom: 100,
+    gap: 20,
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   sectionLabel: {
     fontFamily: fontFamily.semibold,

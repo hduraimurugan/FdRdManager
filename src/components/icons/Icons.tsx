@@ -243,6 +243,15 @@ export function IconMoon({ size = 14, color = '#000', strokeWidth = 2 }: IconPro
   );
 }
 
+export function IconSparkle({ size = 14, color = '#000' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2z" fill={color} />
+      <Path d="M19 15l.7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15z" fill={color} />
+    </Svg>
+  );
+}
+
 export function IconWarning({ size = 26, color = '#000', strokeWidth = 2 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

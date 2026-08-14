@@ -14,7 +14,7 @@ import BarChart from '../components/BarChart';
 import SkeletonBlock from '../components/SkeletonBlock';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
-import { IconRupeeTrend, IconCard, IconTrendUp, IconCalendar, IconChevronRight } from '../components/icons/Icons';
+import { IconRupeeTrend, IconCard, IconTrendUp, IconCalendar, IconChevronRight, IconWallet, IconBell } from '../components/icons/Icons';
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -52,12 +52,19 @@ export default function HomeScreen() {
 
   if (isEmpty) {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.emptyContainer}>
         <EmptyState
           title="No deposits yet"
           subtitle="Add your first FD or RD to see your portfolio here."
           actionLabel="Add a deposit"
           onAction={() => actions.setTab('portfolio')}
+          gradient={theme.gradientHero}
+          icon={<IconWallet size={30} color="#fff" />}
+          highlights={[
+            { icon: <IconWallet size={16} color={theme.accent} />, label: 'Track FD & RD in one place' },
+            { icon: <IconBell size={16} color={theme.accent} />, label: 'Get maturity & payout reminders' },
+            { icon: <IconTrendUp size={16} color={theme.accent} />, label: 'See growth projections' },
+          ]}
         />
       </ScrollView>
     );
@@ -201,6 +208,13 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 100,
     gap: 20,
+  },
+  emptyContainer: {
+    padding: 16,
+    paddingBottom: 100,
+    gap: 20,
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   hero: {
     borderRadius: 22,
