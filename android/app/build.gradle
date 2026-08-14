@@ -77,6 +77,16 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+    // Pinned to a newer CMake than the AGP default (3.22.1): its bundled ninja
+    // (1.10.2) isn't long-path-aware and fails on this project's Windows path
+    // length regardless of the LongPathsEnabled registry setting. CMake 3.31.6
+    // bundles ninja 1.12.1, which is long-path-aware.
+    externalNativeBuild {
+        cmake {
+            version "3.31.6"
+        }
+    }
+
     namespace "com.fdrdmanager"
     defaultConfig {
         applicationId "com.fdrdmanager"

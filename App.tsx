@@ -1,43 +1,54 @@
 /**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
+ * FD/RD Portfolio Manager
  * @format
  */
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import 'react-native-gesture-handler';
+import React from 'react';
+import { StatusBar, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppProvider, useAppState } from './src/state/AppContext';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import RootNavigator from './src/navigation/RootNavigator';
+import ToastOverlay from './src/components/ToastOverlay';
+import ConfirmDialog from './src/components/ConfirmDialog';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
-
+function Root() {
+  const themeTokens = useTheme();
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
+    <>
+      <StatusBar barStyle={themeTokens.mode === 'dark' ? 'light-content' : 'dark-content'} />
+      <RootNavigator />
+      <ToastOverlay />
+      <ConfirmDialog />
+    </>
   );
 }
 
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
+function ThemedApp() {
+  const { theme } = useAppState();
   return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
+    <ThemeProvider mode={theme}>
+      <Root />
+    </ThemeProvider>
+  );
+}
+
+function App() {
+  return (
+    <GestureHandlerRootView style={styles.flex}>
+      <SafeAreaProvider>
+        <AppProvider>
+          <ThemedApp />
+        </AppProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  flex: {
     flex: 1,
   },
 });
