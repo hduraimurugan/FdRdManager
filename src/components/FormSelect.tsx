@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { IconCheck, IconChevronDown } from './icons/Icons';
+import BottomSheet from './BottomSheet';
 
 export default function FormSelect({
   label,
@@ -34,33 +35,27 @@ export default function FormSelect({
         </View>
         <IconChevronDown size={15} color={theme.textFaint} />
       </Pressable>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
-          <View style={[styles.sheet, { backgroundColor: theme.sheet }]}>
-            <View style={[styles.handle, { backgroundColor: theme.borderStrong2 }]} />
-            <Text style={[styles.sheetTitle, { color: theme.text }]}>{label}</Text>
-            <ScrollView style={styles.optionList}>
-              {options.map(opt => (
-                <Pressable
-                  key={opt}
-                  onPress={() => {
-                    onChange(opt);
-                    setOpen(false);
-                  }}
-                  style={[styles.option, { borderColor: theme.divider }]}
-                >
-                  <View style={styles.optionLeft}>
-                    {renderOptionIcon?.(opt)}
-                    <Text style={[styles.optionText, { color: theme.text }]}>{opt}</Text>
-                  </View>
-                  {opt === value && <IconCheck size={16} color={theme.accent} />}
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <BottomSheet visible={open} onClose={() => setOpen(false)} sheetStyle={styles.sheet}>
+        <Text style={[styles.sheetTitle, { color: theme.text }]}>{label}</Text>
+        <ScrollView style={styles.optionList}>
+          {options.map(opt => (
+            <Pressable
+              key={opt}
+              onPress={() => {
+                onChange(opt);
+                setOpen(false);
+              }}
+              style={[styles.option, { borderColor: theme.divider }]}
+            >
+              <View style={styles.optionLeft}>
+                {renderOptionIcon?.(opt)}
+                <Text style={[styles.optionText, { color: theme.text }]}>{opt}</Text>
+              </View>
+              {opt === value && <IconCheck size={16} color={theme.accent} />}
+            </Pressable>
+          ))}
+        </ScrollView>
+      </BottomSheet>
     </View>
   );
 }
@@ -94,24 +89,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
   sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     paddingHorizontal: 18,
-    paddingTop: 18,
     paddingBottom: 30,
     maxHeight: '70%',
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 14,
   },
   sheetTitle: {
     fontFamily: fontFamily.bold,

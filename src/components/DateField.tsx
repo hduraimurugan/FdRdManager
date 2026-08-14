@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { formatDate } from '../data/portfolioData';
 import { IconCalendar } from './icons/Icons';
+import BottomSheet from './BottomSheet';
 
 // Operates on 'YYYY-MM-DD' strings, matching the stored/derived date format everywhere else.
 export default function DateField({
@@ -51,36 +52,31 @@ export default function DateField({
       </Pressable>
 
       {Platform.OS === 'ios' && (
-        <Modal visible={iosOpen} transparent animationType="fade" onRequestClose={() => setIosOpen(false)}>
-          <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setIosOpen(false)} />
-            <View style={[styles.sheet, { backgroundColor: theme.sheet }]}>
-              {iosPending && (
-                <DateTimePicker
-                  value={iosPending}
-                  mode="date"
-                  display="spinner"
-                  onChange={(_event, date) => date && setIosPending(date)}
-                  themeVariant={theme.mode}
-                />
-              )}
-              <View style={styles.sheetActions}>
-                <Pressable onPress={() => setIosOpen(false)} style={styles.sheetBtn}>
-                  <Text style={[styles.sheetBtnText, { color: theme.textMuted }]}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    if (iosPending) onChange(toIso(iosPending));
-                    setIosOpen(false);
-                  }}
-                  style={styles.sheetBtn}
-                >
-                  <Text style={[styles.sheetBtnText, { color: theme.accent }]}>Done</Text>
-                </Pressable>
-              </View>
-            </View>
+        <BottomSheet visible={iosOpen} onClose={() => setIosOpen(false)} sheetStyle={styles.sheet}>
+          {iosPending && (
+            <DateTimePicker
+              value={iosPending}
+              mode="date"
+              display="spinner"
+              onChange={(_event, date) => date && setIosPending(date)}
+              themeVariant={theme.mode}
+            />
+          )}
+          <View style={styles.sheetActions}>
+            <Pressable onPress={() => setIosOpen(false)} style={styles.sheetBtn}>
+              <Text style={[styles.sheetBtnText, { color: theme.textMuted }]}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                if (iosPending) onChange(toIso(iosPending));
+                setIosOpen(false);
+              }}
+              style={styles.sheetBtn}
+            >
+              <Text style={[styles.sheetBtnText, { color: theme.accent }]}>Done</Text>
+            </Pressable>
           </View>
-        </Modal>
+        </BottomSheet>
       )}
     </View>
   );
@@ -107,13 +103,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     fontSize: 14,
   },
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
   sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    paddingHorizontal: 0,
     paddingBottom: 20,
   },
   sheetActions: {

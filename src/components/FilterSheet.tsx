@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
@@ -7,6 +7,7 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { chipStyle } from '../state/selectors';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { IconCheck } from './icons/Icons';
+import BottomSheet from './BottomSheet';
 
 const SORT_DEFS: { key: 'maturity' | 'amount' | 'rate'; label: string }[] = [
   { key: 'maturity', label: 'Maturity date (soonest first)' },
@@ -51,91 +52,71 @@ export default function FilterSheet() {
   const statuses = useMemo(() => ['All', ...new Set(rawList.map(i => i.status))], [rawList]);
 
   return (
-    <Modal visible={state.filterSheetOpen} transparent animationType="fade" onRequestClose={actions.closeFilterSheet}>
-      <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={actions.closeFilterSheet} />
-        <View style={[styles.sheet, { backgroundColor: theme.sheet }]}>
-          <View style={[styles.handle, { backgroundColor: theme.borderStrong2 }]} />
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={[styles.title, { color: theme.text }]}>Filter &amp; sort</Text>
+    <BottomSheet visible={state.filterSheetOpen} onClose={actions.closeFilterSheet} sheetStyle={styles.sheet}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <Text style={[styles.title, { color: theme.text }]}>Filter &amp; sort</Text>
 
-            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Bank</Text>
-            <View style={styles.chipRow}>
-              {banks.map(b => (
-                <Chip key={b} label={b} active={state.filterBank === b} onPress={() => actions.setFilterBank(b)} />
-              ))}
-            </View>
-
-            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Type</Text>
-            <View style={styles.chipRow}>
-              {types.map(t => (
-                <Chip key={t} label={t} active={state.filterType === t} onPress={() => actions.setFilterType(t)} />
-              ))}
-            </View>
-
-            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Status</Text>
-            <View style={styles.chipRow}>
-              {statuses.map(s => (
-                <Chip key={s} label={s} active={state.filterStatus === s} onPress={() => actions.setFilterStatus(s)} />
-              ))}
-            </View>
-
-            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Sort by</Text>
-            <View style={styles.sortList}>
-              {SORT_DEFS.map(sd => {
-                const active = state.sortBy === sd.key;
-                return (
-                  <Pressable
-                    key={sd.key}
-                    onPress={() => actions.setSortBy(sd.key)}
-                    style={[
-                      styles.sortRow,
-                      { backgroundColor: active ? 'rgba(111,102,232,0.13)' : theme.card, borderColor: theme.border },
-                    ]}
-                  >
-                    <Text style={[styles.sortLabel, { color: theme.text }]}>{sd.label}</Text>
-                    {active && <IconCheck size={16} color={theme.accent} />}
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <View style={styles.actionRow}>
-              <Pressable onPress={actions.resetFilters} style={[styles.actionBtn, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
-                <Text style={[styles.actionText, { color: theme.text }]}>Reset</Text>
-              </Pressable>
-              <Pressable onPress={actions.closeFilterSheet} style={styles.actionBtnFlex}>
-                <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.actionGradient}>
-                  <Text style={[styles.actionText, { color: '#fff' }]}>Apply</Text>
-                </LinearGradient>
-              </Pressable>
-            </View>
-          </ScrollView>
+        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Bank</Text>
+        <View style={styles.chipRow}>
+          {banks.map(b => (
+            <Chip key={b} label={b} active={state.filterBank === b} onPress={() => actions.setFilterBank(b)} />
+          ))}
         </View>
-      </View>
-    </Modal>
+
+        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Type</Text>
+        <View style={styles.chipRow}>
+          {types.map(t => (
+            <Chip key={t} label={t} active={state.filterType === t} onPress={() => actions.setFilterType(t)} />
+          ))}
+        </View>
+
+        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Status</Text>
+        <View style={styles.chipRow}>
+          {statuses.map(s => (
+            <Chip key={s} label={s} active={state.filterStatus === s} onPress={() => actions.setFilterStatus(s)} />
+          ))}
+        </View>
+
+        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Sort by</Text>
+        <View style={styles.sortList}>
+          {SORT_DEFS.map(sd => {
+            const active = state.sortBy === sd.key;
+            return (
+              <Pressable
+                key={sd.key}
+                onPress={() => actions.setSortBy(sd.key)}
+                style={[
+                  styles.sortRow,
+                  { backgroundColor: active ? 'rgba(111,102,232,0.13)' : theme.card, borderColor: theme.border },
+                ]}
+              >
+                <Text style={[styles.sortLabel, { color: theme.text }]}>{sd.label}</Text>
+                {active && <IconCheck size={16} color={theme.accent} />}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View style={styles.actionRow}>
+          <Pressable onPress={actions.resetFilters} style={[styles.actionBtn, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
+            <Text style={[styles.actionText, { color: theme.text }]}>Reset</Text>
+          </Pressable>
+          <Pressable onPress={actions.closeFilterSheet} style={styles.actionBtnFlex}>
+            <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.actionGradient}>
+              <Text style={[styles.actionText, { color: '#fff' }]}>Apply</Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
   sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     paddingHorizontal: 18,
-    paddingTop: 18,
     paddingBottom: 26,
     maxHeight: '80%',
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 16,
   },
   title: {
     fontFamily: fontFamily.bold,
