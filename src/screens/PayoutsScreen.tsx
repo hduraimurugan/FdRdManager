@@ -5,7 +5,8 @@ import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { payoutGroups } from '../state/selectors';
 import Card from '../components/Card';
-import { IconBank } from '../components/icons/Icons';
+import EmptyState from '../components/EmptyState';
+import { IconBank, IconClock } from '../components/icons/Icons';
 
 export default function PayoutsScreen() {
   const theme = useTheme();
@@ -14,6 +15,19 @@ export default function PayoutsScreen() {
   const { overdue, sections } = useMemo(() => payoutGroups(state, theme), [state, theme]);
 
   const openRecord = (kind: 'FD' | 'RD', recordId: string) => (kind === 'FD' ? actions.openFDDetail(recordId) : actions.openRDDetail(recordId));
+
+  const isEmpty = overdue.length === 0 && sections.every(sec => sec.items.length === 0);
+  if (isEmpty) {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <EmptyState
+          icon={<IconClock size={22} color={theme.textFaint} />}
+          title="Nothing scheduled"
+          subtitle="Payouts and installments from your active deposits will show up here."
+        />
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>

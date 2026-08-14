@@ -87,19 +87,7 @@ export default function MoreScreen() {
         </View>
       </View>
 
-      <View>
-        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Preview app states</Text>
-        <View style={styles.segRow}>
-          <SegButton label="Normal" active={state.demoMode === 'normal'} onPress={actions.setDemoNormal} />
-          <SegButton label="Loading" active={state.demoMode === 'loading'} onPress={actions.setDemoLoading} />
-          <SegButton label="Error" active={state.demoMode === 'error'} onPress={actions.setDemoError} />
-        </View>
-        <Text style={[styles.hint, { color: theme.textFaint }]}>
-          Switches the Home and Portfolio screens between their normal, loading-skeleton and error states for review.
-        </Text>
-      </View>
-
-      <Text style={[styles.footer, { color: theme.textFaint }]}>FD/RD Portfolio Manager · v1.0 · Sample data</Text>
+      <Text style={[styles.footer, { color: theme.textFaint }]}>FD/RD Portfolio Manager · v1.0</Text>
     </ScrollView>
   );
 }

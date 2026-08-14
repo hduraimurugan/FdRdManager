@@ -6,7 +6,8 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { decorateNotification } from '../state/selectors';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
-import { IconAlert, IconClock, IconWallet, IconRefresh } from '../components/icons/Icons';
+import EmptyState from '../components/EmptyState';
+import { IconAlert, IconClock, IconWallet, IconRefresh, IconBell } from '../components/icons/Icons';
 
 export default function NotificationsScreen() {
   const theme = useTheme();
@@ -18,6 +19,13 @@ export default function NotificationsScreen() {
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
       <TopAppBar title="Notifications" showBack onBack={actions.back} />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        {items.length === 0 && (
+          <EmptyState
+            icon={<IconBell size={22} color={theme.textFaint} />}
+            title="You're all caught up"
+            subtitle="Notifications about maturing deposits and payouts will appear here."
+          />
+        )}
         {items.map(n => (
           <Pressable key={n.id} onPress={() => (n.recordType === 'FD' ? actions.openFDDetail(n.recordId) : actions.openRDDetail(n.recordId))}>
             <Card style={styles.row}>

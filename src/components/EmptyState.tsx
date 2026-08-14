@@ -9,23 +9,27 @@ export default function EmptyState({
   subtitle = 'Try a different search term or clear your filters.',
   actionLabel = 'Clear filters',
   onAction,
+  icon,
 }: {
   title?: string;
   subtitle?: string;
   actionLabel?: string;
-  onAction: () => void;
+  onAction?: () => void;
+  icon?: React.ReactNode;
 }) {
   const theme = useTheme();
   return (
     <View style={styles.wrap}>
       <View style={[styles.iconWrap, { backgroundColor: theme.card }]}>
-        <IconSearch size={22} color={theme.textFaint} />
+        {icon ?? <IconSearch size={22} color={theme.textFaint} />}
       </View>
       <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
       <Text style={[styles.subtitle, { color: theme.textMuted }]}>{subtitle}</Text>
-      <Pressable onPress={onAction} style={[styles.btn, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <Text style={[styles.btnText, { color: theme.text }]}>{actionLabel}</Text>
-      </Pressable>
+      {onAction && (
+        <Pressable onPress={onAction} style={[styles.btn, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Text style={[styles.btnText, { color: theme.text }]}>{actionLabel}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }

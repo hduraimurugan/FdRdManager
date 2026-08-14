@@ -1,24 +1,14 @@
-import React, { createContext, useCallback, useContext, useMemo, useReducer, useRef } from 'react';
-import {
-  FixedDeposit,
-  RecurringDeposit,
-  PortfolioEvent,
-  PortfolioNotification,
-  initialFdList,
-  initialRdList,
-  initialEvents,
-  initialNotifications,
-  daysBetween,
-  TODAY,
-} from '../data/portfolioData';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import { FixedDeposit, RecurringDeposit, PortfolioEvent, PortfolioNotification } from '../data/portfolioData';
+import { StoredFd, StoredRd, openDb, loadAll, upsertFd, upsertRd, deleteFd, deleteRd, getSetting, setSetting } from '../data/db';
+import { today, deriveFd, deriveRd, deriveEvents, deriveNotifications } from '../data/derive';
 import { navigate, goBack } from '../navigation/navigationRef';
 
 export type ActiveTab = 'home' | 'portfolio' | 'payouts' | 'calculators' | 'more';
-export type DemoMode = 'normal' | 'loading' | 'error';
 export type SortBy = 'maturity' | 'amount' | 'rate';
 
 export interface ConfirmDialogState {
-  action: 'close' | 'premature' | 'renew';
+  action: 'close' | 'premature' | 'renew' | 'delete';
   kind: 'FD' | 'RD';
   id: string;
   title: string;
@@ -45,14 +35,18 @@ export interface RdCalcState {
   months: number | string;
 }
 
-// Loosely typed like the prototype's editDraft — holds a mix of FD/RD field values while a form is open.
+// Loosely typed like the original prototype's editDraft — holds a mix of FD/RD field
+// values while a form is open. Only StoredFd/StoredRd columns are ever written back out.
 export type Draft = Record<string, any>;
 
-export interface AppState {
-  fdList: FixedDeposit[];
-  rdList: RecurringDeposit[];
-  events: PortfolioEvent[];
-  notifications: PortfolioNotification[];
+// ---------------------------------------------------------------------------
+// Raw (persisted) reducer state
+// ---------------------------------------------------------------------------
+interface RawState {
+  fdRaw: StoredFd[];
+  rdRaw: StoredRd[];
+  hydrated: boolean;
+  loadError: boolean;
   activeTab: ActiveTab;
   portfolioTab: 'FD' | 'RD';
   search: string;
@@ -63,7 +57,6 @@ export interface AppState {
   filterSheetOpen: boolean;
   confirmDialog: ConfirmDialogState | null;
   toast: string | null;
-  demoMode: DemoMode;
   theme: 'light' | 'dark';
   editDraft: Draft | null;
   fdPayoutOpen: boolean;
@@ -73,11 +66,50 @@ export interface AppState {
   rdCalc: RdCalcState;
 }
 
-const initialState: AppState = {
-  fdList: initialFdList.slice(),
-  rdList: initialRdList.slice(),
-  events: initialEvents.slice(),
-  notifications: initialNotifications.slice(),
+// ---------------------------------------------------------------------------
+// Derived state — what screens/selectors actually consume. `fdList`/`rdList`/
+// `events`/`notifications` are recomputed from fdRaw/rdRaw + today() whenever
+// they change (see useAppState below), never persisted.
+// ---------------------------------------------------------------------------
+export interface AppState extends Omit<RawState, 'fdRaw' | 'rdRaw'> {
+  fdList: FixedDeposit[];
+  rdList: RecurringDeposit[];
+  events: PortfolioEvent[];
+  notifications: PortfolioNotification[];
+}
+
+const todayIso = () => today().toISOString().slice(0, 10);
+
+function blankFdDraft(fdRaw: StoredFd[]): Draft {
+  return {
+    fdNumber: 'FD' + String(fdRaw.length + 1).padStart(3, '0'), bankName: '', branch: '', bankAccountNumber: '', customerId: '',
+    fdHolderName: '', jointHolder: '', fdType: 'Regular', mode: 'Online',
+    principalAmount: '', depositDate: todayIso(), startDate: todayIso(),
+    tenureYears: 1, tenureMonths: 0, tenureDays: 0, interestRate: '', interestType: 'Compound', compoundingFrequency: 'Quarterly',
+    interestPayoutMode: 'At Maturity', interestCreditMethod: 'Reinvested into FD',
+    autoRenewal: 'No', renewalOption: 'Do Not Renew', remarks: '', nominee: '', nomineeRelationship: '',
+    tdsApplicable: 'Yes', tdsPercent: 10, panSubmitted: 'Yes', form15G: 'No', renewalCount: 0, status: 'Active',
+  };
+}
+
+function blankRdDraft(rdRaw: StoredRd[]): Draft {
+  return {
+    rdNumber: 'RD' + String(rdRaw.length + 1).padStart(3, '0'), bankName: '', branch: '', bankAccountNumber: '', customerId: '',
+    rdHolderName: '', jointHolder: '', rdType: 'Regular', mode: 'Online',
+    monthlyInstallment: '', startDate: todayIso(), tenureYears: 1, tenureMonths: 0,
+    interestRate: '', interestType: 'Compound', compoundingFrequency: 'Quarterly',
+    installmentsPaid: 0, remarks: '', renewalCount: 0, status: 'Active',
+  };
+}
+
+const initialFdCalc: FdCalcState = { principal: 500000, ratePct: 7.1, startDate: todayIso(), years: 3, months: 0, days: 0, compounding: 'Quarterly', tdsPercent: 10 };
+const initialRdCalc: RdCalcState = { monthlyInstallment: 10000, ratePct: 6.75, startDate: todayIso(), years: 2, months: 0 };
+
+const initialState: RawState = {
+  fdRaw: [],
+  rdRaw: [],
+  hydrated: false,
+  loadError: false,
   activeTab: 'home',
   portfolioTab: 'FD',
   search: '',
@@ -88,17 +120,18 @@ const initialState: AppState = {
   filterSheetOpen: false,
   confirmDialog: null,
   toast: null,
-  demoMode: 'normal',
   theme: 'light',
   editDraft: null,
   fdPayoutOpen: false,
   fdRenewalOpen: false,
   rdDetailsOpen: false,
-  fdCalc: { principal: 500000, ratePct: 7.1, startDate: '2026-08-10', years: 3, months: 0, days: 0, compounding: 'Quarterly', tdsPercent: 10 },
-  rdCalc: { monthlyInstallment: 10000, ratePct: 6.75, startDate: '2026-08-10', years: 2, months: 0 },
+  fdCalc: initialFdCalc,
+  rdCalc: initialRdCalc,
 };
 
 type Action =
+  | { type: 'HYDRATE'; fdRaw: StoredFd[]; rdRaw: StoredRd[]; theme: 'light' | 'dark' | null }
+  | { type: 'LOAD_ERROR' }
   | { type: 'SET_TAB'; tab: ActiveTab }
   | { type: 'SET_PORTFOLIO_TAB'; tab: 'FD' | 'RD' }
   | { type: 'SET_SEARCH'; value: string }
@@ -110,25 +143,30 @@ type Action =
   | { type: 'OPEN_FILTER_SHEET' }
   | { type: 'CLOSE_FILTER_SHEET' }
   | { type: 'SET_THEME'; theme: 'light' | 'dark' }
-  | { type: 'SET_DEMO_MODE'; mode: DemoMode }
   | { type: 'SHOW_TOAST'; message: string }
   | { type: 'CLEAR_TOAST' }
   | { type: 'SET_EDIT_DRAFT'; draft: Draft | null }
   | { type: 'SET_DRAFT_FIELD'; field: string; value: any }
-  | { type: 'SAVE_FD'; record: FixedDeposit; isNew: boolean }
-  | { type: 'SAVE_RD'; record: RecurringDeposit; isNew: boolean }
-  | { type: 'MARK_STATUS'; kind: 'FD' | 'RD'; id: string; status: string; extra?: Record<string, any> }
+  | { type: 'SAVE_FD'; record: StoredFd; isNew: boolean }
+  | { type: 'SAVE_RD'; record: StoredRd; isNew: boolean }
+  | { type: 'DELETE_FD'; id: string }
+  | { type: 'DELETE_RD'; id: string }
+  | { type: 'MARK_STATUS'; kind: 'FD' | 'RD'; id: string; status: string }
   | { type: 'ASK_CONFIRM'; dialog: ConfirmDialogState }
   | { type: 'CLOSE_CONFIRM' }
-  | { type: 'RENEW'; kind: 'FD' | 'RD'; id: string }
+  | { type: 'RENEW'; kind: 'FD' | 'RD'; id: string; newStartDate: string }
   | { type: 'TOGGLE_FD_PAYOUT' }
   | { type: 'TOGGLE_FD_RENEWAL' }
   | { type: 'TOGGLE_RD_DETAILS' }
   | { type: 'SET_FD_CALC_FIELD'; field: keyof FdCalcState; value: any }
   | { type: 'SET_RD_CALC_FIELD'; field: keyof RdCalcState; value: any };
 
-function reducer(state: AppState, action: Action): AppState {
+function reducer(state: RawState, action: Action): RawState {
   switch (action.type) {
+    case 'HYDRATE':
+      return { ...state, fdRaw: action.fdRaw, rdRaw: action.rdRaw, theme: action.theme === 'dark' ? 'dark' : 'light', hydrated: true, loadError: false };
+    case 'LOAD_ERROR':
+      return { ...state, hydrated: true, loadError: true };
     case 'SET_TAB':
       return { ...state, activeTab: action.tab };
     case 'SET_PORTFOLIO_TAB':
@@ -151,8 +189,6 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, filterSheetOpen: false };
     case 'SET_THEME':
       return { ...state, theme: action.theme };
-    case 'SET_DEMO_MODE':
-      return { ...state, demoMode: action.mode };
     case 'SHOW_TOAST':
       return { ...state, toast: action.message };
     case 'CLEAR_TOAST':
@@ -164,44 +200,40 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SAVE_FD':
       return {
         ...state,
-        fdList: action.isNew ? [...state.fdList, action.record] : state.fdList.map(f => (f.id === action.record.id ? action.record : f)),
+        fdRaw: action.isNew ? [...state.fdRaw, action.record] : state.fdRaw.map(f => (f.id === action.record.id ? action.record : f)),
       };
     case 'SAVE_RD':
       return {
         ...state,
-        rdList: action.isNew ? [...state.rdList, action.record] : state.rdList.map(r => (r.id === action.record.id ? action.record : r)),
+        rdRaw: action.isNew ? [...state.rdRaw, action.record] : state.rdRaw.map(r => (r.id === action.record.id ? action.record : r)),
       };
+    case 'DELETE_FD':
+      return { ...state, fdRaw: state.fdRaw.filter(f => f.id !== action.id), confirmDialog: null };
+    case 'DELETE_RD':
+      return { ...state, rdRaw: state.rdRaw.filter(r => r.id !== action.id), confirmDialog: null };
     case 'MARK_STATUS': {
-      const key = action.kind === 'FD' ? 'fdList' : 'rdList';
-      return {
-        ...state,
-        [key]: (state[key] as any[]).map(r => (r.id === action.id ? { ...r, status: action.status, ...action.extra } : r)),
-        confirmDialog: null,
-      } as AppState;
+      if (action.kind === 'FD') {
+        return { ...state, fdRaw: state.fdRaw.map(f => (f.id === action.id ? { ...f, status: action.status } : f)), confirmDialog: null };
+      }
+      return { ...state, rdRaw: state.rdRaw.map(r => (r.id === action.id ? { ...r, status: action.status } : r)), confirmDialog: null };
     }
     case 'ASK_CONFIRM':
       return { ...state, confirmDialog: action.dialog };
     case 'CLOSE_CONFIRM':
       return { ...state, confirmDialog: null };
     case 'RENEW': {
-      const key = action.kind === 'FD' ? 'fdList' : 'rdList';
+      if (action.kind === 'FD') {
+        return {
+          ...state,
+          fdRaw: state.fdRaw.map(f => (f.id === action.id ? { ...f, startDate: action.newStartDate, renewalCount: f.renewalCount + 1 } : f)),
+          confirmDialog: null,
+        };
+      }
       return {
         ...state,
-        [key]: (state[key] as any[]).map(r => {
-          if (r.id !== action.id) return r;
-          const oldMaturity = new Date(r.maturityDate);
-          const newMaturity = new Date(oldMaturity);
-          newMaturity.setFullYear(newMaturity.getFullYear() + (r.tenureYears || 1));
-          return {
-            ...r,
-            maturityDate: newMaturity.toISOString().slice(0, 10),
-            daysRemaining: daysBetween(TODAY, newMaturity),
-            renewalCount: (r.renewalCount || 0) + 1,
-            actionNeeded: null,
-          };
-        }),
+        rdRaw: state.rdRaw.map(r => (r.id === action.id ? { ...r, startDate: action.newStartDate, installmentsPaid: 0, renewalCount: r.renewalCount + 1 } : r)),
         confirmDialog: null,
-      } as AppState;
+      };
     }
     case 'TOGGLE_FD_PAYOUT':
       return { ...state, fdPayoutOpen: !state.fdPayoutOpen };
@@ -218,25 +250,66 @@ function reducer(state: AppState, action: Action): AppState {
   }
 }
 
-const FREQ_N: Record<string, number> = { Monthly: 12, Quarterly: 4, 'Half-Yearly': 2, Yearly: 1 };
-
-function blankFdDraft(fdList: FixedDeposit[]): Draft {
+function draftToStoredFd(draft: Draft, id: string): StoredFd {
   return {
-    fdNumber: 'FD' + String(fdList.length + 1).padStart(3, '0'), bankName: 'HDFC Bank', branch: '', bankAccountNumber: '', customerId: '',
-    fdHolderName: '', jointHolder: '', fdType: 'Regular', mode: 'Online',
-    principalAmount: '', depositDate: '2026-08-10', startDate: '2026-08-10',
-    tenureYears: 1, tenureMonths: 0, tenureDays: 0, interestRate: '', interestType: 'Compound', compoundingFrequency: 'Quarterly',
-    interestPayoutMode: 'At Maturity', interestCreditMethod: 'Reinvested into FD',
-    autoRenewal: 'No', renewalOption: 'Do Not Renew',
+    id,
+    fdNumber: String(draft.fdNumber ?? ''),
+    bankName: String(draft.bankName ?? ''),
+    branch: String(draft.branch ?? ''),
+    bankAccountNumber: String(draft.bankAccountNumber ?? ''),
+    customerId: String(draft.customerId ?? ''),
+    fdHolderName: String(draft.fdHolderName ?? ''),
+    jointHolder: draft.jointHolder ? String(draft.jointHolder) : null,
+    fdType: String(draft.fdType ?? 'Regular'),
+    mode: String(draft.mode ?? 'Online'),
+    status: String(draft.status ?? 'Active'),
+    principalAmount: Number(draft.principalAmount) || 0,
+    depositDate: String(draft.depositDate ?? draft.startDate),
+    startDate: String(draft.startDate),
+    tenureYears: Number(draft.tenureYears) || 0,
+    tenureMonths: Number(draft.tenureMonths) || 0,
+    tenureDays: Number(draft.tenureDays) || 0,
+    interestRate: Number(draft.interestRate) || 0,
+    interestType: String(draft.interestType ?? 'Compound'),
+    compoundingFrequency: String(draft.compoundingFrequency ?? 'Quarterly'),
+    interestPayoutMode: String(draft.interestPayoutMode ?? 'At Maturity'),
+    interestCreditMethod: String(draft.interestCreditMethod ?? 'Reinvested into FD'),
+    autoRenewal: String(draft.autoRenewal ?? 'No'),
+    renewalOption: String(draft.renewalOption ?? 'Do Not Renew'),
+    remarks: String(draft.remarks ?? ''),
+    nominee: String(draft.nominee ?? ''),
+    nomineeRelationship: String(draft.nomineeRelationship ?? ''),
+    tdsApplicable: String(draft.tdsApplicable ?? 'Yes'),
+    tdsPercent: Number(draft.tdsPercent) || 0,
+    panSubmitted: String(draft.panSubmitted ?? 'Yes'),
+    form15G: String(draft.form15G ?? 'No'),
+    renewalCount: Number(draft.renewalCount) || 0,
   };
 }
 
-function blankRdDraft(rdList: RecurringDeposit[]): Draft {
+function draftToStoredRd(draft: Draft, id: string): StoredRd {
   return {
-    rdNumber: 'RD' + String(rdList.length + 1).padStart(3, '0'), bankName: 'HDFC Bank', branch: '', bankAccountNumber: '', customerId: '',
-    rdHolderName: '', jointHolder: '', rdType: 'Regular', mode: 'Online',
-    monthlyInstallment: '', startDate: '2026-08-10', tenureYears: 1, tenureMonths: 0,
-    interestRate: '', interestType: 'Compound', compoundingFrequency: 'Quarterly',
+    id,
+    rdNumber: String(draft.rdNumber ?? ''),
+    bankName: String(draft.bankName ?? ''),
+    branch: String(draft.branch ?? ''),
+    bankAccountNumber: String(draft.bankAccountNumber ?? ''),
+    customerId: String(draft.customerId ?? ''),
+    rdHolderName: String(draft.rdHolderName ?? ''),
+    jointHolder: draft.jointHolder ? String(draft.jointHolder) : null,
+    rdType: String(draft.rdType ?? 'Regular'),
+    mode: String(draft.mode ?? 'Online'),
+    status: String(draft.status ?? 'Active'),
+    monthlyInstallment: Number(draft.monthlyInstallment) || 0,
+    startDate: String(draft.startDate),
+    tenureYears: Number(draft.tenureYears) || 0,
+    tenureMonths: Number(draft.tenureMonths) || 0,
+    interestRate: Number(draft.interestRate) || 0,
+    interestType: String(draft.interestType ?? 'Compound'),
+    compoundingFrequency: String(draft.compoundingFrequency ?? 'Quarterly'),
+    installmentsPaid: Number(draft.installmentsPaid) || 0,
+    remarks: String(draft.remarks ?? ''),
+    renewalCount: Number(draft.renewalCount) || 0,
   };
 }
 
@@ -254,9 +327,6 @@ export interface AppActions {
   closeFilterSheet: () => void;
   setThemeLight: () => void;
   setThemeDark: () => void;
-  setDemoNormal: () => void;
-  setDemoLoading: () => void;
-  setDemoError: () => void;
   showToast: (message: string) => void;
   goMaturityTimeline: () => void;
   goNotifications: () => void;
@@ -281,16 +351,33 @@ export interface AppActions {
   fcSet: (field: keyof FdCalcState) => (value: any) => void;
   rcSet: (field: keyof RdCalcState) => (value: any) => void;
   back: () => void;
+  retryLoad: () => void;
 }
 
-const StateContext = createContext<AppState>(initialState);
+const StateContext = createContext<RawState>(initialState);
 const ActionsContext = createContext<AppActions | null>(null);
+
+const THEME_KEY = 'theme';
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  const load = useCallback(async () => {
+    try {
+      await openDb();
+      const [{ fds, rds }, themeSetting] = await Promise.all([loadAll(), getSetting(THEME_KEY)]);
+      dispatch({ type: 'HYDRATE', fdRaw: fds, rdRaw: rds, theme: themeSetting === 'dark' ? 'dark' : 'light' });
+    } catch {
+      dispatch({ type: 'LOAD_ERROR' });
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const showToast = useCallback((message: string) => {
     dispatch({ type: 'SHOW_TOAST', message });
@@ -310,11 +397,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     resetFilters: () => dispatch({ type: 'RESET_FILTERS' }),
     openFilterSheet: () => dispatch({ type: 'OPEN_FILTER_SHEET' }),
     closeFilterSheet: () => dispatch({ type: 'CLOSE_FILTER_SHEET' }),
-    setThemeLight: () => dispatch({ type: 'SET_THEME', theme: 'light' }),
-    setThemeDark: () => dispatch({ type: 'SET_THEME', theme: 'dark' }),
-    setDemoNormal: () => dispatch({ type: 'SET_DEMO_MODE', mode: 'normal' }),
-    setDemoLoading: () => dispatch({ type: 'SET_DEMO_MODE', mode: 'loading' }),
-    setDemoError: () => dispatch({ type: 'SET_DEMO_MODE', mode: 'error' }),
+    setThemeLight: () => {
+      dispatch({ type: 'SET_THEME', theme: 'light' });
+      setSetting(THEME_KEY, 'light').catch(() => {});
+    },
+    setThemeDark: () => {
+      dispatch({ type: 'SET_THEME', theme: 'dark' });
+      setSetting(THEME_KEY, 'dark').catch(() => {});
+    },
     showToast,
     goMaturityTimeline: () => navigate('MaturityTimeline'),
     goNotifications: () => navigate('Notifications'),
@@ -322,20 +412,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     openFDDetail: id => navigate('FdDetail', { id }),
     openRDDetail: id => navigate('RdDetail', { id }),
     openAddFD: () => {
-      dispatch({ type: 'SET_EDIT_DRAFT', draft: blankFdDraft(stateRef.current.fdList) });
+      dispatch({ type: 'SET_EDIT_DRAFT', draft: blankFdDraft(stateRef.current.fdRaw) });
       navigate('AddEditFD', { id: null });
     },
     openAddRD: () => {
-      dispatch({ type: 'SET_EDIT_DRAFT', draft: blankRdDraft(stateRef.current.rdList) });
+      dispatch({ type: 'SET_EDIT_DRAFT', draft: blankRdDraft(stateRef.current.rdRaw) });
       navigate('AddEditRD', { id: null });
     },
     openEditFD: id => {
-      const rec = stateRef.current.fdList.find(f => f.id === id);
+      const rec = stateRef.current.fdRaw.find(f => f.id === id);
       dispatch({ type: 'SET_EDIT_DRAFT', draft: rec ? { ...rec } : null });
       navigate('AddEditFD', { id });
     },
     openEditRD: id => {
-      const rec = stateRef.current.rdList.find(r => r.id === id);
+      const rec = stateRef.current.rdRaw.find(r => r.id === id);
       dispatch({ type: 'SET_EDIT_DRAFT', draft: rec ? { ...rec } : null });
       navigate('AddEditRD', { id });
     },
@@ -343,50 +433,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveDraftFD: id => {
       const draft = stateRef.current.editDraft;
       if (!draft) return;
-      const startDate = new Date(draft.startDate);
-      const maturity = new Date(startDate);
-      maturity.setFullYear(maturity.getFullYear() + Number(draft.tenureYears || 0));
-      maturity.setMonth(maturity.getMonth() + Number(draft.tenureMonths || 0));
-      maturity.setDate(maturity.getDate() + Number(draft.tenureDays || 0));
-      const principal = Number(draft.principalAmount) || 0;
-      const rate = Number(draft.interestRate) || 0;
-      const totalDays = daysBetween(startDate, maturity);
-      const totalYears = totalDays / 365;
-      const n = FREQ_N[draft.compoundingFrequency] || 4;
-      const isPayout = draft.interestPayoutMode !== 'At Maturity';
-      const maturityAmount = isPayout ? principal : Math.round(principal * Math.pow(1 + rate / 100 / n, n * totalYears));
-      const record = {
-        ...draft, id: id || 'fd-' + Date.now(), status: id ? draft.status : 'Active',
-        principalAmount: principal, interestRate: rate, maturityDate: maturity.toISOString().slice(0, 10),
-        maturityAmount, currentValue: id ? draft.currentValue : principal, interestEarnedTotal: maturityAmount - principal,
-        interestEarnedSoFar: id ? draft.interestEarnedSoFar : 0, daysRemaining: daysBetween(TODAY, maturity), totalDays,
-        elapsedDays: id ? draft.elapsedDays : 0,
-        isPayoutFD: isPayout, nextPayoutAmount: isPayout ? Math.round(principal * (rate / 100) / n) : null,
-        nextPayoutDate: isPayout ? draft.startDate : null,
-      } as FixedDeposit;
+      const record = draftToStoredFd(draft, id || 'fd-' + Date.now());
       dispatch({ type: 'SAVE_FD', record, isNew: !id });
+      upsertFd(record).catch(() => showToast('Failed to save — try again'));
       goBack();
       showToast(id ? 'FD updated successfully' : 'FD added successfully');
     },
     saveDraftRD: id => {
       const draft = stateRef.current.editDraft;
       if (!draft) return;
-      const startDate = new Date(draft.startDate);
-      const totalMonths = Number(draft.tenureYears || 0) * 12 + Number(draft.tenureMonths || 0);
-      const maturity = new Date(startDate);
-      maturity.setMonth(maturity.getMonth() + totalMonths);
-      const installment = Number(draft.monthlyInstallment) || 0;
-      const rate = Number(draft.interestRate) || 0;
-      const maturityAmount = Math.round(installment * totalMonths + (installment * (rate / 100) * totalMonths * (totalMonths + 1)) / 24);
-      const record = {
-        ...draft, id: id || 'rd-' + Date.now(), status: id ? draft.status : 'Active',
-        monthlyInstallment: installment, interestRate: rate, maturityDate: maturity.toISOString().slice(0, 10),
-        totalMonths, maturityAmount, totalDeposited: id ? draft.totalDeposited : 0, interestEarnedSoFar: id ? draft.interestEarnedSoFar : 0,
-        interestEarnedTotal: maturityAmount - installment * totalMonths, currentValue: id ? draft.currentValue : 0,
-        installmentsTotal: totalMonths, installmentsPaid: id ? draft.installmentsPaid : 0, installmentsMissed: id ? draft.installmentsMissed : 0,
-        daysRemaining: daysBetween(TODAY, maturity), nextInstallmentDate: draft.startDate, autoDebit: draft.mode === 'Online' ? 'Yes' : 'No',
-      } as RecurringDeposit;
+      const record = draftToStoredRd(draft, id || 'rd-' + Date.now());
       dispatch({ type: 'SAVE_RD', record, isNew: !id });
+      upsertRd(record).catch(() => showToast('Failed to save — try again'));
       goBack();
       showToast(id ? 'RD updated successfully' : 'RD added successfully');
     },
@@ -403,21 +461,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!c) return;
       if (c.action === 'close') {
         dispatch({ type: 'MARK_STATUS', kind: c.kind, id: c.id, status: 'Closed' });
+        persistStatus(c.kind, c.id, 'Closed');
         showToast(c.kind + ' marked as closed');
         goBack();
       } else if (c.action === 'premature') {
         dispatch({ type: 'MARK_STATUS', kind: c.kind, id: c.id, status: 'Prematurely Closed' });
+        persistStatus(c.kind, c.id, 'Prematurely Closed');
         showToast(c.kind + ' closed prematurely');
         goBack();
       } else if (c.action === 'renew') {
-        dispatch({ type: 'RENEW', kind: c.kind, id: c.id });
+        const newStartDate = todayIso();
+        dispatch({ type: 'RENEW', kind: c.kind, id: c.id, newStartDate });
+        persistRenew(c.kind, c.id, newStartDate);
         showToast(c.kind + ' renewed successfully');
+      } else if (c.action === 'delete') {
+        if (c.kind === 'FD') {
+          dispatch({ type: 'DELETE_FD', id: c.id });
+          deleteFd(c.id).catch(() => {});
+        } else {
+          dispatch({ type: 'DELETE_RD', id: c.id });
+          deleteRd(c.id).catch(() => {});
+        }
+        showToast(c.kind + ' deleted');
+        goBack();
+      }
+
+      function persistStatus(kind: 'FD' | 'RD', id: string, status: string) {
+        if (kind === 'FD') {
+          const rec = stateRef.current.fdRaw.find(f => f.id === id);
+          if (rec) upsertFd({ ...rec, status }).catch(() => {});
+        } else {
+          const rec = stateRef.current.rdRaw.find(r => r.id === id);
+          if (rec) upsertRd({ ...rec, status }).catch(() => {});
+        }
+      }
+      function persistRenew(kind: 'FD' | 'RD', id: string, newStartDate: string) {
+        if (kind === 'FD') {
+          const rec = stateRef.current.fdRaw.find(f => f.id === id);
+          if (rec) upsertFd({ ...rec, startDate: newStartDate, renewalCount: rec.renewalCount + 1 }).catch(() => {});
+        } else {
+          const rec = stateRef.current.rdRaw.find(r => r.id === id);
+          if (rec) upsertRd({ ...rec, startDate: newStartDate, installmentsPaid: 0, renewalCount: rec.renewalCount + 1 }).catch(() => {});
+        }
       }
     },
     fcSet: field => value => dispatch({ type: 'SET_FD_CALC_FIELD', field, value }),
     rcSet: field => value => dispatch({ type: 'SET_RD_CALC_FIELD', field, value }),
     back: () => goBack(),
-  }), [showToast]);
+    retryLoad: () => load(),
+  }), [showToast, load]);
 
   return (
     <StateContext.Provider value={state}>
@@ -427,7 +519,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAppState(): AppState {
-  return useContext(StateContext);
+  const raw = useContext(StateContext);
+  const fdList = useMemo(() => raw.fdRaw.map(f => deriveFd(f, today())), [raw.fdRaw]);
+  const rdList = useMemo(() => raw.rdRaw.map(r => deriveRd(r, today())), [raw.rdRaw]);
+  const events = useMemo(() => deriveEvents(fdList, rdList), [fdList, rdList]);
+  const notifications = useMemo(() => deriveNotifications(fdList, rdList, today()), [fdList, rdList]);
+  return { ...raw, fdList, rdList, events, notifications };
 }
 
 export function useAppActions(): AppActions {

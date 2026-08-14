@@ -7,6 +7,7 @@ import { calcRD, formatDate, formatINR } from '../data/portfolioData';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
 import FormField from '../components/FormField';
+import DateField from '../components/DateField';
 
 export default function RdCalculatorScreen() {
   const theme = useTheme();
@@ -37,7 +38,7 @@ export default function RdCalculatorScreen() {
         <Card style={styles.section}>
           <FormField label="Monthly installment (₹)" value={String(rc.monthlyInstallment)} onChangeText={actions.rcSet('monthlyInstallment')} keyboardType="numeric" />
           <FormField label="Interest rate (% p.a.)" value={String(rc.ratePct)} onChangeText={actions.rcSet('ratePct')} keyboardType="numeric" />
-          <FormField label="Start date" value={rc.startDate} onChangeText={actions.rcSet('startDate')} placeholder="YYYY-MM-DD" />
+          <DateField label="Start date" value={rc.startDate} onChange={actions.rcSet('startDate')} />
           <View style={styles.row2}>
             <View style={styles.flex1}>
               <FormField label="Years" value={String(rc.years)} onChangeText={actions.rcSet('years')} keyboardType="numeric" />

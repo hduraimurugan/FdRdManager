@@ -8,6 +8,7 @@ import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
 import FormField from '../components/FormField';
 import FormSelect from '../components/FormSelect';
+import DateField from '../components/DateField';
 
 export default function FdCalculatorScreen() {
   const theme = useTheme();
@@ -49,7 +50,7 @@ export default function FdCalculatorScreen() {
         <Card style={styles.section}>
           <FormField label="Principal amount (₹)" value={String(fc.principal)} onChangeText={actions.fcSet('principal')} keyboardType="numeric" />
           <FormField label="Interest rate (% p.a.)" value={String(fc.ratePct)} onChangeText={actions.fcSet('ratePct')} keyboardType="numeric" />
-          <FormField label="Start date" value={fc.startDate} onChangeText={actions.fcSet('startDate')} placeholder="YYYY-MM-DD" />
+          <DateField label="Start date" value={fc.startDate} onChange={actions.fcSet('startDate')} />
           <View style={styles.row3}>
             <View style={styles.flex1}>
               <FormField label="Years" value={String(fc.years)} onChangeText={actions.fcSet('years')} keyboardType="numeric" />

@@ -5,7 +5,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { homeMetrics, urgentNotifications, bankDistribution, typeDistribution, projectedInterest } from '../state/selectors';
-import { TODAY } from '../data/portfolioData';
+import { today } from '../data/derive';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import Card from '../components/Card';
 import StatPill from '../components/StatPill';
@@ -13,30 +13,34 @@ import DonutChart from '../components/DonutChart';
 import BarChart from '../components/BarChart';
 import SkeletonBlock from '../components/SkeletonBlock';
 import ErrorState from '../components/ErrorState';
+import EmptyState from '../components/EmptyState';
 import { IconRupeeTrend, IconCard, IconTrendUp, IconCalendar, IconChevronRight } from '../components/icons/Icons';
-
-const TODAY_LABEL = TODAY.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
 export default function HomeScreen() {
   const theme = useTheme();
   const state = useAppState();
   const actions = useAppActions();
 
+  const todayLabel = useMemo(
+    () => today().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+    [],
+  );
   const metrics = useMemo(() => homeMetrics(state), [state]);
   const urgent = useMemo(() => urgentNotifications(state, theme), [state, theme]);
   const banks = useMemo(() => bankDistribution(state), [state]);
   const types = useMemo(() => typeDistribution(state, theme), [state, theme]);
   const projection = useMemo(() => projectedInterest(state), [state]);
+  const isEmpty = state.fdList.length === 0 && state.rdList.length === 0;
 
-  if (state.demoMode === 'error') {
+  if (state.loadError) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
-        <ErrorState onRetry={actions.setDemoNormal} />
+        <ErrorState title="Couldn't load your portfolio" subtitle="Something went wrong reading your saved data." onRetry={actions.retryLoad} />
       </ScrollView>
     );
   }
 
-  if (state.demoMode === 'loading') {
+  if (!state.hydrated) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
         <SkeletonBlock height={150} />
@@ -46,10 +50,23 @@ export default function HomeScreen() {
     );
   }
 
+  if (isEmpty) {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <EmptyState
+          title="No deposits yet"
+          subtitle="Add your first FD or RD to see your portfolio here."
+          actionLabel="Add a deposit"
+          onAction={() => actions.setTab('portfolio')}
+        />
+      </ScrollView>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       <LinearGradient colors={theme.gradientHero.colors} locations={theme.gradientHero.locations} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.hero}>
-        <Text style={[styles.heroLabel, { color: theme.textMuted }]}>{TODAY_LABEL}</Text>
+        <Text style={[styles.heroLabel, { color: theme.textMuted }]}>{todayLabel}</Text>
         <Text style={[styles.heroSub, { color: theme.textMuted }]}>Current value</Text>
         <Text style={[styles.heroValue, { color: theme.text }]}>{metrics.currentValueFmt}</Text>
         <View style={styles.heroRow}>

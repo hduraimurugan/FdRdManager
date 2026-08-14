@@ -7,12 +7,14 @@ import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { rdEstimate } from '../state/selectors';
 import { BANKS, COMPOUNDING_FREQUENCIES } from '../data/portfolioData';
+import { today, computeInstallmentsDue } from '../data/derive';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { RootStackParamList } from '../navigation/types';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
 import FormField from '../components/FormField';
 import FormSelect from '../components/FormSelect';
+import DateField from '../components/DateField';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddEditRD'>;
 
@@ -26,7 +28,11 @@ export default function AddEditRdScreen({ route }: Props) {
   const draft = state.editDraft || EMPTY_DRAFT;
   const estimate = useMemo(() => rdEstimate(draft), [draft]);
   const set = (field: string) => (value: string) => actions.setDraftField(field, value);
-  const isEditing = !!id;
+
+  const totalMonths = Number(draft.tenureYears || 0) * 12 + Number(draft.tenureMonths || 0);
+  const installmentsDue = draft.startDate ? computeInstallmentsDue(draft.startDate, totalMonths, today()) : 0;
+  const installmentsPaid = Number(draft.installmentsPaid) || 0;
+  const installmentsMissed = Math.max(0, installmentsDue - installmentsPaid);
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
@@ -35,7 +41,7 @@ export default function AddEditRdScreen({ route }: Props) {
         <Card style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Basic details</Text>
           <FormField label="RD number" value={String(draft.rdNumber ?? '')} onChangeText={set('rdNumber')} />
-          <FormSelect label="Bank" value={draft.bankName ?? BANKS[0]} options={BANKS} onChange={set('bankName')} />
+          <FormSelect label="Bank" value={draft.bankName ?? ''} options={BANKS} onChange={set('bankName')} placeholder="Select bank" />
           <FormField label="Branch" value={String(draft.branch ?? '')} onChangeText={set('branch')} />
           <FormField label="Bank account number" value={String(draft.bankAccountNumber ?? '')} onChangeText={set('bankAccountNumber')} keyboardType="number-pad" />
           <FormField label="Customer ID" value={String(draft.customerId ?? '')} onChangeText={set('customerId')} />
@@ -48,7 +54,7 @@ export default function AddEditRdScreen({ route }: Props) {
         <Card style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Deposit &amp; tenure</Text>
           <FormField label="Monthly installment (₹)" value={String(draft.monthlyInstallment ?? '')} onChangeText={set('monthlyInstallment')} keyboardType="numeric" />
-          <FormField label="Start date" value={String(draft.startDate ?? '')} onChangeText={set('startDate')} placeholder="YYYY-MM-DD" />
+          <DateField label="Start date" value={String(draft.startDate ?? '')} onChange={set('startDate')} />
           <View style={styles.row2}>
             <View style={styles.flex1}>
               <FormField label="Years" value={String(draft.tenureYears ?? '')} onChangeText={set('tenureYears')} keyboardType="numeric" />
@@ -61,21 +67,21 @@ export default function AddEditRdScreen({ route }: Props) {
           <FormSelect label="Compounding frequency" value={draft.compoundingFrequency ?? COMPOUNDING_FREQUENCIES[0]} options={COMPOUNDING_FREQUENCIES} onChange={set('compoundingFrequency')} />
         </Card>
 
-        {isEditing && (
-          <Card>
-            <Text style={[styles.sectionLabel, { color: theme.textMuted, marginBottom: 10 }]}>Installment tracking (auto-calculated)</Text>
-            <View style={styles.kvRow}>
-              <Text style={[styles.kvLabel, { color: theme.textMuted }]}>Installments paid</Text>
-              <Text style={[styles.kvValue, { color: theme.text }]}>
-                {draft.installmentsPaid} / {draft.installmentsTotal}
-              </Text>
-            </View>
-            <View style={styles.kvRow}>
-              <Text style={[styles.kvLabel, { color: theme.textMuted }]}>Missed</Text>
-              <Text style={[styles.kvValue, { color: theme.text }]}>{draft.installmentsMissed}</Text>
-            </View>
-          </Card>
-        )}
+        <Card style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Installment tracking</Text>
+          <FormField
+            label="Installments paid so far"
+            value={String(draft.installmentsPaid ?? 0)}
+            onChangeText={set('installmentsPaid')}
+            keyboardType="numeric"
+          />
+          {draft.startDate ? (
+            <Text style={[styles.hint, { color: installmentsMissed > 0 ? theme.danger : theme.textFaint }]}>
+              {installmentsDue} installment{installmentsDue === 1 ? '' : 's'} due as of today
+              {installmentsMissed > 0 ? ` · ${installmentsMissed} missed` : ''}
+            </Text>
+          ) : null}
+        </Card>
 
         <LinearGradient colors={theme.gradientCalc.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.estimateCard}>
           <Text style={[styles.estimateLabel, { color: theme.accentLight }]}>Estimated (calculated automatically)</Text>
@@ -118,18 +124,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  kvRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  kvLabel: {
+  hint: {
     fontFamily: fontFamily.regular,
-    fontSize: 13,
-  },
-  kvValue: {
-    fontFamily: fontFamily.medium,
-    fontSize: 13,
+    fontSize: 12,
+    marginTop: -4,
   },
   estimateCard: {
     borderRadius: 16,

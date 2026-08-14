@@ -6,6 +6,8 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { timelineMonths } from '../state/selectors';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
+import EmptyState from '../components/EmptyState';
+import { IconCalendar } from '../components/icons/Icons';
 
 export default function MaturityTimelineScreen() {
   const theme = useTheme();
@@ -17,6 +19,13 @@ export default function MaturityTimelineScreen() {
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
       <TopAppBar title="Maturity Timeline" showBack onBack={actions.back} />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        {months.length === 0 && (
+          <EmptyState
+            icon={<IconCalendar size={22} color={theme.textFaint} />}
+            title="Nothing maturing soon"
+            subtitle="Active deposits maturing in the next 12 months will show up here."
+          />
+        )}
         {months.map(mo => (
           <View key={mo.label}>
             <Text style={[styles.monthLabel, { color: theme.text }]}>{mo.label}</Text>

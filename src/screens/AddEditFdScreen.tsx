@@ -13,6 +13,7 @@ import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
 import FormField from '../components/FormField';
 import FormSelect from '../components/FormSelect';
+import DateField from '../components/DateField';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddEditFD'>;
 
@@ -34,7 +35,7 @@ export default function AddEditFdScreen({ route }: Props) {
         <Card style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Basic details</Text>
           <FormField label="FD number" value={String(draft.fdNumber ?? '')} onChangeText={set('fdNumber')} />
-          <FormSelect label="Bank" value={draft.bankName ?? BANKS[0]} options={BANKS} onChange={set('bankName')} />
+          <FormSelect label="Bank" value={draft.bankName ?? ''} options={BANKS} onChange={set('bankName')} placeholder="Select bank" />
           <FormField label="Branch" value={String(draft.branch ?? '')} onChangeText={set('branch')} />
           <FormField label="Bank account number" value={String(draft.bankAccountNumber ?? '')} onChangeText={set('bankAccountNumber')} keyboardType="number-pad" />
           <FormField label="Customer ID" value={String(draft.customerId ?? '')} onChangeText={set('customerId')} />
@@ -47,8 +48,8 @@ export default function AddEditFdScreen({ route }: Props) {
           <FormSelect label="FD type" value={draft.fdType ?? FD_TYPES[0]} options={FD_TYPES} onChange={set('fdType')} />
           <FormSelect label="Mode" value={draft.mode ?? 'Online'} options={['Online', 'Offline']} onChange={set('mode')} />
           <FormField label="Principal amount (₹)" value={String(draft.principalAmount ?? '')} onChangeText={set('principalAmount')} keyboardType="numeric" />
-          <FormField label="Deposit date" value={String(draft.depositDate ?? '')} onChangeText={set('depositDate')} placeholder="YYYY-MM-DD" />
-          <FormField label="Start date" value={String(draft.startDate ?? '')} onChangeText={set('startDate')} placeholder="YYYY-MM-DD" />
+          <DateField label="Deposit date" value={String(draft.depositDate ?? '')} onChange={set('depositDate')} />
+          <DateField label="Start date" value={String(draft.startDate ?? '')} onChange={set('startDate')} />
         </Card>
 
         <Card style={styles.section}>

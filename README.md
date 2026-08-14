@@ -15,25 +15,27 @@ A React Native app for tracking Fixed Deposit (FD) and Recurring Deposit (RD) in
 - [Windows: known Android build issue](#windows-known-android-build-issue)
 - [Metro connection issues on a physical device](#metro-connection-issues-on-a-physical-device)
 - [Everyday scripts](#everyday-scripts)
-- [Demo data & app states](#demo-data--app-states)
+- [Data & persistence](#data--persistence)
 - [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 
 ## Features
 
 - **Home** — invested/current-value/interest/maturity summary, bank & type distribution, 6-month interest projection, upcoming maturities.
-- **Portfolio** — FD/RD tabs with search, filter (bank/type/status), and sort; add/edit/close/renew a deposit.
+- **Portfolio** — FD/RD tabs with search, filter (bank/type/status), and sort; add/edit/delete/close/renew a deposit.
 - **Payouts** — overdue, due-today, this-week, this-month and upcoming payouts/installments, grouped.
 - **Calculators** — standalone FD (simple vs. compound) and RD calculators, independent of your saved data.
 - **Notifications** & **Maturity timeline** — cross-linked to the relevant FD/RD.
-- **More** — light/dark theme toggle, and a demo-state switch (normal / loading / error) for reviewing every screen's states.
+- **More** — light/dark theme toggle (persisted).
 
-All data is local mock data (see [Demo data & app states](#demo-data--app-states)) — there is no backend.
+Everything you enter is stored locally on-device in SQLite (see [Data & persistence](#data--persistence)) — there is no backend, and nothing leaves the device.
 
 ## Tech stack
 
 - React Native 0.87, React 19, TypeScript
 - [`@react-navigation/native-stack`](https://reactnavigation.org/) for navigation (a single stack; the bottom tab bar is a custom component driven by app state, not a separate navigator)
+- `@op-engineering/op-sqlite` for on-device storage
+- `@react-native-community/datetimepicker` for date entry
 - `react-native-svg` for icons and the investment-by-type donut chart
 - `react-native-linear-gradient` for all gradient fills
 - `react-native-safe-area-context`, `react-native-screens`, `react-native-gesture-handler`
@@ -46,12 +48,15 @@ All data is local mock data (see [Demo data & app states](#demo-data--app-states
 App.tsx                     Root: providers, navigation, global overlays (toast, confirm dialog)
 src/
   assets/fonts/              Bundled Inter .ttf files
-  components/                Shared UI (Card, TopAppBar, BottomTabBar, FilterSheet, forms, icons/...)
-  data/portfolioData.ts       Mock FDs/RDs/events/notifications + formatting & FD/RD calculators
+  components/                Shared UI (Card, TopAppBar, BottomTabBar, FilterSheet, forms, DateField, icons/...)
+  data/
+    portfolioData.ts          Types, reference lists (banks/types/...), formatters, FD/RD calculators
+    db.ts                     SQLite repository — the ONLY module that talks to the database
+    derive.ts                 Turns stored rows + today's date into live values, events, notifications
   navigation/                 Stack navigator, route param types, imperative nav ref
   screens/                    One file per screen (Home, Portfolio, FdDetail, AddEditFD, ...)
   state/
-    AppContext.tsx            App state (useReducer) + actions
+    AppContext.tsx            App state (useReducer), persistence wiring, actions
     selectors.ts               Derived/decorated view data (status colors, filtering, metrics, charts)
   theme/                      Light/dark color tokens, gradients, font family constants
 ```
@@ -176,17 +181,20 @@ If the app installs but shows a red **"Unable to load script"** screen, Metro ei
 
 To force-reload the running app: **Android** — press <kbd>R</kbd> twice, or open the Dev Menu with <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>M</kbd>. **iOS** — press <kbd>R</kbd> in the Simulator.
 
-## Demo data & app states
+## Data & persistence
 
-All FD/RD records, events, and notifications are static mock data in `src/data/portfolioData.ts`, anchored to a fixed "today" (`TODAY = new Date('2026-08-10')`) so the maturity/payout urgency logic is deterministic. Adding, editing, renewing, or closing a deposit updates in-memory state only — nothing persists across app restarts.
+The app starts empty — add your own FDs and RDs from the Portfolio tab. Everything is stored on-device in a SQLite database (via `@op-engineering/op-sqlite`); nothing is bundled or pre-populated.
 
-The **More** tab has a "Preview app states" control (Normal / Loading / Error) that switches the Home and Portfolio screens between their normal, loading-skeleton, and error states — useful for visually reviewing all three without needing a real backend.
+Only what you actually enter is persisted (bank, principal, rate, tenure, dates, etc. — see `StoredFd`/`StoredRd` in `src/data/db.ts`). Time-dependent values — maturity date/amount, current value, interest earned so far, days remaining, effective status, next payout/installment date — are **never stored**; `src/data/derive.ts` recomputes them from your stored data against the real current date every time the app reads them, so a deposit's progress is always correct, not frozen at the moment you saved it. The Home "needs attention" list, Payouts screen, and Notifications screen are all derived the same way, not separate data.
+
+Deleting a deposit (from its detail screen, behind a confirmation dialog) permanently removes it from the database.
+
+Theme preference is persisted too, so it survives an app restart.
 
 ## Known limitations
 
-- **Date fields** (deposit/start dates, calculator inputs) are plain text inputs constrained to `YYYY-MM-DD`, not a native date picker.
-- **No persistence** — app state resets on restart/reload.
-- **No backend** — all data is local mock data.
+- **RD installment tracking** is manual: you record how many installments you've actually paid on the Add/Edit RD screen; the app compares that against how many are due by today's date to compute "missed" — there's no automated bank-side sync.
+- **FD interest-payout tracking** is schedule-based, not receipt-tracked: "next payout" is always the next scheduled date rolled forward from the start date at the chosen frequency — there's no ledger of payouts actually received.
 
 ## Troubleshooting
 

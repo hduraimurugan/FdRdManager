@@ -30,11 +30,12 @@ export default function PortfolioScreen() {
     [filtered, kind, theme],
   );
   const filtersActive = state.filterBank !== 'All' || state.filterType !== 'All' || state.filterStatus !== 'All';
+  const hasAnyRecords = rawList.length > 0;
 
-  if (state.demoMode === 'error') {
+  if (state.loadError) {
     return (
       <View style={styles.container}>
-        <ErrorState title="Couldn't load deposits" onRetry={actions.setDemoNormal} compact />
+        <ErrorState title="Couldn't load deposits" subtitle="Something went wrong reading your saved data." onRetry={actions.retryLoad} compact />
       </View>
     );
   }
@@ -87,7 +88,7 @@ export default function PortfolioScreen() {
         </View>
       </View>
 
-      {state.demoMode === 'loading' ? (
+      {!state.hydrated ? (
         <View style={styles.listPad}>
           <SkeletonBlock height={104} />
           <SkeletonBlock height={104} />
@@ -99,7 +100,18 @@ export default function PortfolioScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listPad}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<EmptyState onAction={actions.resetFilters} />}
+          ListEmptyComponent={
+            hasAnyRecords ? (
+              <EmptyState onAction={actions.resetFilters} />
+            ) : (
+              <EmptyState
+                title={`No ${kind}s yet`}
+                subtitle={`Tap the + button to add your first ${kind}.`}
+                actionLabel={`Add ${kind}`}
+                onAction={kind === 'FD' ? actions.openAddFD : actions.openAddRD}
+              />
+            )
+          }
           renderItem={({ item }) => (
             <Pressable onPress={() => (item.kind === 'FD' ? actions.openFDDetail(item.id) : actions.openRDDetail(item.id))}>
               <Card style={styles.itemCard}>

@@ -9,11 +9,13 @@ export default function FormSelect({
   value,
   options,
   onChange,
+  placeholder = 'Select',
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (value: string) => void;
+  placeholder?: string;
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
@@ -22,8 +24,8 @@ export default function FormSelect({
     <View style={styles.wrap}>
       <Text style={[styles.label, { color: theme.textMuted }]}>{label}</Text>
       <Pressable onPress={() => setOpen(true)} style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
-        <Text style={[styles.value, { color: theme.text }]} numberOfLines={1}>
-          {value}
+        <Text style={[styles.value, { color: value ? theme.text : theme.textFaint }]} numberOfLines={1}>
+          {value || placeholder}
         </Text>
         <IconChevronDown size={15} color={theme.textFaint} />
       </Pressable>

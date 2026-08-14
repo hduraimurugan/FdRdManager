@@ -139,13 +139,21 @@ export default function RdDetailScreen({ route }: Props) {
           {canClose && (
             <Pressable
               style={styles.actionFlex}
-              onPress={() => actions.askConfirm('close', 'RD', rd.id, 'Mark RD as closed?', 'This marks the deposit as closed. This cannot be undone in this demo.', 'Mark Closed')}
+              onPress={() => actions.askConfirm('close', 'RD', rd.id, 'Mark RD as closed?', 'This marks the deposit as closed.', 'Mark Closed')}
             >
               <View style={[styles.actionBtnOutline, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Text style={[styles.actionText, { color: theme.text }]}>Mark as Closed</Text>
               </View>
             </Pressable>
           )}
+          <Pressable
+            style={styles.actionFlex}
+            onPress={() => actions.askConfirm('delete', 'RD', rd.id, 'Delete this RD?', 'This will permanently remove the deposit and cannot be undone.', 'Delete')}
+          >
+            <View style={[styles.actionBtnOutline, { backgroundColor: theme.card, borderColor: 'rgba(248,113,113,0.25)' }]}>
+              <Text style={[styles.actionText, { color: theme.danger }]}>Delete</Text>
+            </View>
+          </Pressable>
         </View>
       </ScrollView>
     </View>
