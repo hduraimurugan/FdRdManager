@@ -1,25 +1,69 @@
-# FD/RD Portfolio Manager
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/icon.png" width="110" alt="FD/RD Manager app icon">
+</p>
 
-A React Native app for tracking Fixed Deposit (FD) and Recurring Deposit (RD) investments: portfolio overview, per-deposit detail, payout/maturity tracking, standalone FD/RD calculators, and light/dark theming. Built with React Native 0.87 (New Architecture), TypeScript, and React Navigation.
+<h1 align="center">FD/RD Manager</h1>
+
+<p align="center">
+  Track Fixed Deposits &amp; Recurring Deposits — 100% offline, no ads, no trackers, no account.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+  <img alt="Platform: Android" src="https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white">
+  <img alt="Made with React Native" src="https://img.shields.io/badge/Made%20with-React%20Native-61DAFB?logo=react&logoColor=white">
+  <img alt="Min SDK 24" src="https://img.shields.io/badge/API-24%2B-brightgreen">
+  <img alt="No internet permission" src="https://img.shields.io/badge/permissions-1%20(notifications%20only)-success">
+</p>
+
+<p align="center">
+  <a href="https://github.com/hduraimurugan/FdRdManager/releases/latest/download/app-release.apk">
+    <img alt="Download APK" src="https://img.shields.io/badge/Download-APK-6C4CE0?style=for-the-badge&logo=android&logoColor=white">
+  </a>
+</p>
+
+FD/RD Manager is a React Native app for tracking Fixed Deposit (FD) and Recurring Deposit (RD) investments: portfolio overview, per-deposit detail, payout/maturity tracking, standalone FD/RD calculators, and light/dark theming. Everything you enter stays on your device — there is no backend, no account, and no data ever leaves your phone.
 
 ## Contents
 
+- [Download](#download)
+- [Why FD/RD Manager](#why-fdrd-manager)
 - [Features](#features)
+- [Privacy & permissions](#privacy--permissions)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Setup](#setup)
-- [Running the app](#running-the-app)
+- [Building from source](#building-from-source)
+  - [Prerequisites](#prerequisites)
+  - [Setup](#setup)
   - [Run on Android](#run-on-android)
   - [Run on iOS](#run-on-ios)
-- [Windows: known Android build issue](#windows-known-android-build-issue)
-- [Metro connection issues on a physical device](#metro-connection-issues-on-a-physical-device)
-- [Everyday scripts](#everyday-scripts)
-- [Release signing](#release-signing)
+  - [Windows: known Android build issue](#windows-known-android-build-issue)
+  - [Metro connection issues on a physical device](#metro-connection-issues-on-a-physical-device)
+  - [Everyday scripts](#everyday-scripts)
+  - [Release signing](#release-signing)
 - [Data & persistence](#data--persistence)
 - [Maturity reminders](#maturity-reminders)
 - [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Download
+
+| | |
+|---|---|
+| **Latest release (APK)** | [Download the latest signed APK](https://github.com/hduraimurugan/FdRdManager/releases/latest/download/app-release.apk) |
+| **All releases** | [github.com/hduraimurugan/FdRdManager/releases](https://github.com/hduraimurugan/FdRdManager/releases) |
+| **Requirements** | Android 7.0 (API 24) or newer |
+
+The APK is self-signed with this project's own release key (see [Release signing](#release-signing)) — it is **not** distributed through Google Play or F-Droid, so you'll need to allow "install from unknown sources" for your browser/file manager. Every release is built from this exact source tree; you're welcome to [build it yourself](#building-from-source) instead and compare.
+
+## Why FD/RD Manager
+
+- **Fully offline.** No network calls at runtime — the release build ships with no `INTERNET` permission at all (see [Privacy & permissions](#privacy--permissions)).
+- **No ads, no analytics, no accounts.** Nothing to sign up for, nothing being measured.
+- **Your data stays yours.** Local SQLite storage on-device, with encrypted export/import when you want a backup.
+- **Open source.** MIT-licensed — read every line, or [build it from source](#building-from-source).
 
 ## Features
 
@@ -34,7 +78,17 @@ A React Native app for tracking Fixed Deposit (FD) and Recurring Deposit (RD) in
 - **Delete all data** — a typed-confirmation full wipe (More → Data).
 - **More** — light/dark theme toggle (persisted).
 
-Everything you enter is stored locally on-device in SQLite (see [Data & persistence](#data--persistence)) — there is no backend, and nothing leaves the device. Reminder notifications are scheduled entirely on-device too.
+## Privacy & permissions
+
+FD/RD Manager is built on the same principle most F-Droid apps hold to: the app should only ask for what it strictly needs, and nothing about your finances should leave your device.
+
+| Permission | Why |
+|---|---|
+| `POST_NOTIFICATIONS` | Requested at runtime on Android 13+ only when you turn on [maturity reminders](#maturity-reminders); required by Android to show any local notification. |
+
+That's the only permission in the release manifest. There is **no `INTERNET` permission** — the app cannot make network calls even if it wanted to — and no analytics, crash-reporting, or ad SDKs are bundled. `android:allowBackup="false"` also keeps your data out of Android's cloud auto-backup.
+
+The one caveat: the on-device SQLite database itself is **not encrypted at rest** (app-private storage keeps it away from other apps, but a rooted device or a raw ADB backup could read it). See [Known limitations](#known-limitations).
 
 ## Tech stack
 
@@ -81,7 +135,9 @@ src/
   theme/                      Light/dark color tokens, gradients, font family constants
 ```
 
-## Prerequisites
+## Building from source
+
+### Prerequisites
 
 Follow React Native's official [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide for your OS and target platform first. You'll need:
 
@@ -89,7 +145,7 @@ Follow React Native's official [Set Up Your Environment](https://reactnative.dev
 - **Android**: Android Studio, an Android SDK (this project targets whatever `compileSdk`/`minSdk` are set in `android/build.gradle`), and either an emulator or a USB-connected device with debugging enabled
 - **iOS** (macOS only): Xcode + CocoaPods
 
-## Setup
+### Setup
 
 ```sh
 npm install
@@ -103,8 +159,6 @@ bundle exec pod install
 ```
 
 Android needs no separate native-dependency install step — Gradle resolves everything on first build.
-
-## Running the app
 
 ### Run on Android
 
@@ -130,7 +184,7 @@ Leave this running in its own terminal, then in a second terminal:
 npm run ios
 ```
 
-## Windows: known Android build issue
+### Windows: known Android build issue
 
 This project pulls in several native modules (`react-native-gesture-handler`, `react-native-screens`, `react-native-svg`, `react-native-safe-area-context`) that go through New Architecture C++ codegen during the Android build. On Windows, the generated object-file paths for these libraries — especially `react-native-gesture-handler`, which has an unusually deep source tree — can exceed Windows' classic 260-character path limit, and the build fails with something like:
 
@@ -175,7 +229,7 @@ Remove-Item -Recurse -Force android\app\.cxx, android\app\build, android\.gradle
 
 This is a one-time environment setup per machine — not something you need to redo per build. macOS/Linux are unaffected (no 260-character path limit).
 
-### The CMake pin above only covers the app module — third-party native modules need it too
+#### The CMake pin above only covers the app module — third-party native modules need it too
 
 The `android/app/build.gradle` pin fixes the app's own native build, but each of
 `react-native-gesture-handler`, `react-native-screens`, and `@op-engineering/op-sqlite`
@@ -199,7 +253,7 @@ shouldn't need to think about this at all under normal use. If you add a new nat
 dependency that also uses CMake and hits this same release-build failure, add its
 `android/build.gradle` path to the `TARGETS` array in that script.
 
-## Metro connection issues on a physical device
+### Metro connection issues on a physical device
 
 If the app installs but shows a red **"Unable to load script"** screen, Metro either isn't running or can't reach the device:
 
@@ -211,7 +265,7 @@ If the app installs but shows a red **"Unable to load script"** screen, Metro ei
 3. If you're on **Wi-Fi**, open the in-app Dev Menu (shake the device, or `adb shell input keyevent 82`) → **Settings** → **Debug server host & port for device**, and set it to your computer's LAN IP and port `8081`.
 4. Then reload the app (press <kbd>R</kbd> twice, or tap **Reload** on the error screen).
 
-## Everyday scripts
+### Everyday scripts
 
 | Command | Description |
 |---|---|
@@ -225,7 +279,7 @@ If the app installs but shows a red **"Unable to load script"** screen, Metro ei
 
 To force-reload the running app: **Android** — press <kbd>R</kbd> twice, or open the Dev Menu with <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>M</kbd>. **iOS** — press <kbd>R</kbd> in the Simulator.
 
-## Release signing
+### Release signing
 
 Debug builds sign with the checked-in `debug.keystore` (its password really is `android` —
 that's the standard, public Android debug key, not a secret). **Release builds must not
@@ -288,3 +342,11 @@ That foreground resync is also this app's answer to "reschedule after a reboot":
 ## Troubleshooting
 
 For issues not covered above, see React Native's own [Troubleshooting guide](https://reactnative.dev/docs/troubleshooting) and [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide.
+
+## Contributing
+
+Issues and pull requests are welcome. If you're proposing a larger change, open an issue first to discuss the approach — this keeps the "derive, don't store" and "no backend, ever" design principles intact.
+
+## License
+
+FD/RD Manager is licensed under the [MIT License](LICENSE).
