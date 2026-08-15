@@ -256,28 +256,34 @@ export async function loadAll(): Promise<{ fds: StoredFd[]; rds: StoredRd[] }> {
   };
 }
 
-export async function upsertFd(fd: StoredFd): Promise<void> {
-  const database = getDb();
+function fdUpsertQuery(fd: StoredFd): [string, unknown[]] {
   const placeholders = FD_COLUMNS.map(() => '?').join(', ');
   const updateSet = FD_COLUMNS.filter(c => c !== 'id').map(c => `${c} = excluded.${c}`).join(', ');
-  const values = FD_COLUMNS.map(c => fd[c] ?? null);
-  await database.execute(
+  return [
     `INSERT INTO fixed_deposits (${FD_COLUMNS.join(', ')}) VALUES (${placeholders})
      ON CONFLICT(id) DO UPDATE SET ${updateSet}`,
-    values as any[],
-  );
+    FD_COLUMNS.map(c => fd[c] ?? null),
+  ];
+}
+
+function rdUpsertQuery(rd: StoredRd): [string, unknown[]] {
+  const placeholders = RD_COLUMNS.map(() => '?').join(', ');
+  const updateSet = RD_COLUMNS.filter(c => c !== 'id').map(c => `${c} = excluded.${c}`).join(', ');
+  return [
+    `INSERT INTO recurring_deposits (${RD_COLUMNS.join(', ')}) VALUES (${placeholders})
+     ON CONFLICT(id) DO UPDATE SET ${updateSet}`,
+    RD_COLUMNS.map(c => rd[c] ?? null),
+  ];
+}
+
+export async function upsertFd(fd: StoredFd): Promise<void> {
+  const [sql, values] = fdUpsertQuery(fd);
+  await getDb().execute(sql, values as any[]);
 }
 
 export async function upsertRd(rd: StoredRd): Promise<void> {
-  const database = getDb();
-  const placeholders = RD_COLUMNS.map(() => '?').join(', ');
-  const updateSet = RD_COLUMNS.filter(c => c !== 'id').map(c => `${c} = excluded.${c}`).join(', ');
-  const values = RD_COLUMNS.map(c => rd[c] ?? null);
-  await database.execute(
-    `INSERT INTO recurring_deposits (${RD_COLUMNS.join(', ')}) VALUES (${placeholders})
-     ON CONFLICT(id) DO UPDATE SET ${updateSet}`,
-    values as any[],
-  );
+  const [sql, values] = rdUpsertQuery(rd);
+  await getDb().execute(sql, values as any[]);
 }
 
 export async function deleteFd(id: string): Promise<void> {
@@ -299,4 +305,33 @@ export async function setSetting(key: string, value: string): Promise<void> {
     `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
     [key, value],
   );
+}
+
+export async function getAllSettings(): Promise<Record<string, string>> {
+  const result = await getDb().execute('SELECT key, value FROM settings');
+  const out: Record<string, string> = {};
+  for (const row of result.rows) out[String(row.key)] = String(row.value ?? '');
+  return out;
+}
+
+/** Bulk upsert used by backup restore. Runs inside a single transaction so a
+ * failure partway through rolls back instead of leaving a half-merged DB. */
+export async function importAll(fds: StoredFd[], rds: StoredRd[], settings: Record<string, string>): Promise<void> {
+  const database = getDb();
+  await database.transaction(async tx => {
+    for (const fd of fds) {
+      const [sql, values] = fdUpsertQuery(fd);
+      await tx.execute(sql, values as any[]);
+    }
+    for (const rd of rds) {
+      const [sql, values] = rdUpsertQuery(rd);
+      await tx.execute(sql, values as any[]);
+    }
+    for (const [key, value] of Object.entries(settings)) {
+      await tx.execute(
+        `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        [key, value],
+      );
+    }
+  });
 }

@@ -11,6 +11,7 @@ import FdCalculatorScreen from '../screens/FdCalculatorScreen';
 import RdCalculatorScreen from '../screens/RdCalculatorScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import MaturityTimelineScreen from '../screens/MaturityTimelineScreen';
+import BackupRestoreScreen from '../screens/BackupRestoreScreen';
 import { NavigationContainer } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -49,6 +50,7 @@ export default function RootNavigator() {
         <Stack.Screen name="RdCalculator" component={RdCalculatorScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="MaturityTimeline" component={MaturityTimelineScreen} />
+        <Stack.Screen name="BackupRestore" component={BackupRestoreScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

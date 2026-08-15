@@ -8,4 +8,5 @@ export type RootStackParamList = {
   RdCalculator: undefined;
   Notifications: undefined;
   MaturityTimeline: undefined;
+  BackupRestore: undefined;
 };

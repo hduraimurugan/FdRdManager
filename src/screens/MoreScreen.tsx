@@ -63,11 +63,11 @@ export default function MoreScreen() {
           <Text style={[styles.rowLabel, { color: theme.text }]}>Maturity timeline</Text>
           <IconChevronRight size={15} color={theme.textFaint} />
         </Pressable>
-        <Pressable onPress={actions.toastComingSoon} style={[styles.row, { borderBottomColor: theme.divider, borderBottomWidth: 1 }]}>
+        <Pressable onPress={actions.goBackupRestore} style={[styles.row, { borderBottomColor: theme.divider, borderBottomWidth: 1 }]}>
           <View style={[styles.rowIcon, { backgroundColor: 'rgba(91,158,224,0.15)' }]}>
             <IconDownload size={17} color="#5b9ee0" />
           </View>
-          <Text style={[styles.rowLabel, { color: theme.text }]}>Export statement</Text>
+          <Text style={[styles.rowLabel, { color: theme.text }]}>Backup & Restore</Text>
           <IconChevronRight size={15} color={theme.textFaint} />
         </Pressable>
         <Pressable onPress={actions.toastComingSoon} style={styles.row}>

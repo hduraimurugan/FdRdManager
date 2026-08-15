@@ -1,19 +1,40 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { FixedDeposit, RecurringDeposit, PortfolioEvent, PortfolioNotification } from '../data/portfolioData';
-import { StoredFd, StoredRd, openDb, loadAll, upsertFd, upsertRd, deleteFd, deleteRd, getSetting, setSetting } from '../data/db';
+import {
+  StoredFd,
+  StoredRd,
+  openDb,
+  loadAll,
+  upsertFd,
+  upsertRd,
+  deleteFd,
+  deleteRd,
+  getSetting,
+  setSetting,
+  getAllSettings,
+  importAll,
+} from '../data/db';
 import { today, deriveFd, deriveRd, deriveEvents, deriveNotifications } from '../data/derive';
 import { navigate, goBack } from '../navigation/navigationRef';
+import { backupFilename, buildBackupEnvelope, serializeBackup, validateBackupJson } from '../data/backupSchema';
+import { writeBackupFile, shareBackupFile, pickBackupFileText } from '../data/backupIO';
 
 export type ActiveTab = 'home' | 'portfolio' | 'payouts' | 'calculators' | 'more';
 export type SortBy = 'maturity' | 'amount' | 'rate';
 
 export interface ConfirmDialogState {
-  action: 'close' | 'premature' | 'renew' | 'delete';
-  kind: 'FD' | 'RD';
+  action: 'close' | 'premature' | 'renew' | 'delete' | 'import';
+  kind: 'FD' | 'RD' | 'ALL';
   id: string;
   title: string;
   message: string;
   confirmLabel: string;
+}
+
+export interface PendingImport {
+  fds: StoredFd[];
+  rds: StoredRd[];
+  settings: Record<string, string>;
 }
 
 export interface FdCalcState {
@@ -65,6 +86,9 @@ interface RawState {
   rdDetailsOpen: boolean;
   fdCalc: FdCalcState;
   rdCalc: RdCalcState;
+  exporting: boolean;
+  importing: boolean;
+  pendingImport: PendingImport | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +153,9 @@ const initialState: RawState = {
   rdDetailsOpen: false,
   fdCalc: initialFdCalc,
   rdCalc: initialRdCalc,
+  exporting: false,
+  importing: false,
+  pendingImport: null,
 };
 
 type Action =
@@ -162,7 +189,10 @@ type Action =
   | { type: 'TOGGLE_FD_STATEMENTS' }
   | { type: 'TOGGLE_RD_DETAILS' }
   | { type: 'SET_FD_CALC_FIELD'; field: keyof FdCalcState; value: any }
-  | { type: 'SET_RD_CALC_FIELD'; field: keyof RdCalcState; value: any };
+  | { type: 'SET_RD_CALC_FIELD'; field: keyof RdCalcState; value: any }
+  | { type: 'SET_EXPORTING'; value: boolean }
+  | { type: 'SET_IMPORTING'; value: boolean }
+  | { type: 'SET_PENDING_IMPORT'; data: PendingImport | null };
 
 function reducer(state: RawState, action: Action): RawState {
   switch (action.type) {
@@ -223,7 +253,7 @@ function reducer(state: RawState, action: Action): RawState {
     case 'ASK_CONFIRM':
       return { ...state, confirmDialog: action.dialog };
     case 'CLOSE_CONFIRM':
-      return { ...state, confirmDialog: null };
+      return { ...state, confirmDialog: null, pendingImport: null };
     case 'RENEW': {
       if (action.kind === 'FD') {
         return {
@@ -250,6 +280,12 @@ function reducer(state: RawState, action: Action): RawState {
       return { ...state, fdCalc: { ...state.fdCalc, [action.field]: action.value } };
     case 'SET_RD_CALC_FIELD':
       return { ...state, rdCalc: { ...state.rdCalc, [action.field]: action.value } };
+    case 'SET_EXPORTING':
+      return { ...state, exporting: action.value };
+    case 'SET_IMPORTING':
+      return { ...state, importing: action.value };
+    case 'SET_PENDING_IMPORT':
+      return { ...state, pendingImport: action.data };
     default:
       return state;
   }
@@ -335,6 +371,9 @@ export interface AppActions {
   showToast: (message: string) => void;
   goMaturityTimeline: () => void;
   goNotifications: () => void;
+  goBackupRestore: () => void;
+  exportBackup: () => void;
+  importBackup: () => void;
   toastComingSoon: () => void;
   openFDDetail: (id: string) => void;
   openRDDetail: (id: string) => void;
@@ -414,6 +453,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     showToast,
     goMaturityTimeline: () => navigate('MaturityTimeline'),
     goNotifications: () => navigate('Notifications'),
+    goBackupRestore: () => navigate('BackupRestore'),
+    exportBackup: async () => {
+      dispatch({ type: 'SET_EXPORTING', value: true });
+      try {
+        const settings = await getAllSettings();
+        const envelope = buildBackupEnvelope(stateRef.current.fdRaw, stateRef.current.rdRaw, settings);
+        const filename = backupFilename();
+        const path = await writeBackupFile(serializeBackup(envelope), filename);
+        await shareBackupFile(path, filename);
+      } catch {
+        showToast('Export failed — try again');
+      } finally {
+        dispatch({ type: 'SET_EXPORTING', value: false });
+      }
+    },
+    importBackup: async () => {
+      dispatch({ type: 'SET_IMPORTING', value: true });
+      try {
+        const text = await pickBackupFileText();
+        if (text == null) return; // user cancelled the picker
+        const result = validateBackupJson(text);
+        if (!result.ok) {
+          showToast(result.reason === 'empty' ? 'No valid FD/RD entries found in that file' : "That file isn't a valid FD/RD backup");
+          return;
+        }
+        dispatch({ type: 'SET_PENDING_IMPORT', data: { fds: result.fds, rds: result.rds, settings: result.settings } });
+        dispatch({
+          type: 'ASK_CONFIRM',
+          dialog: {
+            action: 'import',
+            kind: 'ALL',
+            id: '',
+            title: 'Restore backup?',
+            message: `This will add ${result.fds.length} FD(s) and ${result.rds.length} RD(s). Existing entries with a matching ID will be overwritten with the backup's data — nothing is deleted.`,
+            confirmLabel: 'Restore',
+          },
+        });
+      } catch {
+        showToast('Could not read that file');
+      } finally {
+        dispatch({ type: 'SET_IMPORTING', value: false });
+      }
+    },
     toastComingSoon: () => showToast('Coming soon'),
     openFDDetail: id => navigate('FdDetail', { id }),
     openRDDetail: id => navigate('RdDetail', { id }),
@@ -466,31 +548,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     runConfirm: () => {
       const c = stateRef.current.confirmDialog;
       if (!c) return;
+      const dialogKind = c.kind as 'FD' | 'RD'; // 'ALL' only ever occurs for the 'import' action, handled separately below
       if (c.action === 'close') {
-        dispatch({ type: 'MARK_STATUS', kind: c.kind, id: c.id, status: 'Closed' });
-        persistStatus(c.kind, c.id, 'Closed');
-        showToast(c.kind + ' marked as closed');
+        dispatch({ type: 'MARK_STATUS', kind: dialogKind, id: c.id, status: 'Closed' });
+        persistStatus(dialogKind, c.id, 'Closed');
+        showToast(dialogKind + ' marked as closed');
         goBack();
       } else if (c.action === 'premature') {
-        dispatch({ type: 'MARK_STATUS', kind: c.kind, id: c.id, status: 'Prematurely Closed' });
-        persistStatus(c.kind, c.id, 'Prematurely Closed');
-        showToast(c.kind + ' closed prematurely');
+        dispatch({ type: 'MARK_STATUS', kind: dialogKind, id: c.id, status: 'Prematurely Closed' });
+        persistStatus(dialogKind, c.id, 'Prematurely Closed');
+        showToast(dialogKind + ' closed prematurely');
         goBack();
       } else if (c.action === 'renew') {
         const newStartDate = todayIso();
-        dispatch({ type: 'RENEW', kind: c.kind, id: c.id, newStartDate });
-        persistRenew(c.kind, c.id, newStartDate);
-        showToast(c.kind + ' renewed successfully');
+        dispatch({ type: 'RENEW', kind: dialogKind, id: c.id, newStartDate });
+        persistRenew(dialogKind, c.id, newStartDate);
+        showToast(dialogKind + ' renewed successfully');
       } else if (c.action === 'delete') {
-        if (c.kind === 'FD') {
+        if (dialogKind === 'FD') {
           dispatch({ type: 'DELETE_FD', id: c.id });
           deleteFd(c.id).catch(() => {});
         } else {
           dispatch({ type: 'DELETE_RD', id: c.id });
           deleteRd(c.id).catch(() => {});
         }
-        showToast(c.kind + ' deleted');
+        showToast(dialogKind + ' deleted');
         goBack();
+      } else if (c.action === 'import') {
+        const pending = stateRef.current.pendingImport;
+        dispatch({ type: 'CLOSE_CONFIRM' });
+        if (pending) {
+          const fdCount = pending.fds.length;
+          const rdCount = pending.rds.length;
+          dispatch({ type: 'SET_IMPORTING', value: true });
+          importAll(pending.fds, pending.rds, pending.settings)
+            .then(load)
+            .then(() => showToast(`Backup restored — ${fdCount} FD(s), ${rdCount} RD(s)`))
+            .catch(() => showToast('Import failed — your existing data was not changed'))
+            .finally(() => dispatch({ type: 'SET_IMPORTING', value: false }));
+        }
       }
 
       function persistStatus(kind: 'FD' | 'RD', id: string, status: string) {
