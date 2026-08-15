@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import LinearGradient from 'react-native-linear-gradient';
@@ -7,6 +7,7 @@ import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { fdEstimate } from '../state/selectors';
 import { BANKS, FD_TYPES, COMPOUNDING_FREQUENCIES, PAYOUT_FREQUENCIES, CREDIT_METHODS } from '../data/portfolioData';
+import { validateFdDraft, isValidDraft } from '../data/validation';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { RootStackParamList } from '../navigation/types';
 import Card from '../components/Card';
@@ -27,7 +28,27 @@ export default function AddEditFdScreen({ route }: Props) {
   const { id } = route.params;
   const draft = state.editDraft || EMPTY_DRAFT;
   const estimate = useMemo(() => fdEstimate(draft), [draft]);
-  const set = (field: string) => (value: string) => actions.setDraftField(field, value);
+  const errors = useMemo(() => validateFdDraft(draft), [draft]);
+
+  // Errors only render once a field has been touched, or once the user has tried to
+  // save with the form invalid — a blank Add form shouldn't open already covered in red.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [attempted, setAttempted] = useState(false);
+  const errorFor = (field: string) => (attempted || touched[field] ? errors[field] : undefined);
+
+  const set = (field: string) => (value: string) => {
+    setTouched(t => (t[field] ? t : { ...t, [field]: true }));
+    actions.setDraftField(field, value);
+  };
+
+  const handleSave = () => {
+    if (!isValidDraft(errors)) {
+      setAttempted(true);
+      actions.showToast('Fix the highlighted fields before saving');
+      return;
+    }
+    actions.saveDraftFD(id);
+  };
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
@@ -35,7 +56,7 @@ export default function AddEditFdScreen({ route }: Props) {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Card style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Basic details</Text>
-          <FormField label="FD number" value={String(draft.fdNumber ?? '')} onChangeText={set('fdNumber')} />
+          <FormField label="FD number" value={String(draft.fdNumber ?? '')} onChangeText={set('fdNumber')} error={errorFor('fdNumber')} />
           <FormSelect
             label="Bank"
             value={draft.bankName ?? ''}
@@ -43,6 +64,7 @@ export default function AddEditFdScreen({ route }: Props) {
             onChange={set('bankName')}
             placeholder="Select bank"
             renderOptionIcon={bank => <BankLogo bankName={bank} size={28} />}
+            error={errorFor('bankName')}
           />
           <FormField label="Branch" value={String(draft.branch ?? '')} onChangeText={set('branch')} />
           <FormField label="Bank account number" value={String(draft.bankAccountNumber ?? '')} onChangeText={set('bankAccountNumber')} keyboardType="number-pad" />
@@ -55,8 +77,8 @@ export default function AddEditFdScreen({ route }: Props) {
           <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Deposit details</Text>
           <FormSelect label="FD type" value={draft.fdType ?? FD_TYPES[0]} options={FD_TYPES} onChange={set('fdType')} />
           <FormSelect label="Mode" value={draft.mode ?? 'Online'} options={['Online', 'Offline']} onChange={set('mode')} />
-          <FormField label="Principal amount (₹)" value={String(draft.principalAmount ?? '')} onChangeText={set('principalAmount')} keyboardType="numeric" />
-          <DateField label="Deposit date" value={String(draft.depositDate ?? '')} onChange={set('depositDate')} />
+          <FormField label="Principal amount (₹)" value={String(draft.principalAmount ?? '')} onChangeText={set('principalAmount')} keyboardType="numeric" error={errorFor('principalAmount')} />
+          <DateField label="Deposit date" value={String(draft.depositDate ?? '')} onChange={set('depositDate')} error={errorFor('depositDate')} />
           <DateField label="Start date" value={String(draft.startDate ?? '')} onChange={set('startDate')} />
         </Card>
 
@@ -64,7 +86,7 @@ export default function AddEditFdScreen({ route }: Props) {
           <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Tenure &amp; interest</Text>
           <View style={styles.row3}>
             <View style={styles.flex1}>
-              <FormField label="Years" value={String(draft.tenureYears ?? '')} onChangeText={set('tenureYears')} keyboardType="numeric" />
+              <FormField label="Years" value={String(draft.tenureYears ?? '')} onChangeText={set('tenureYears')} keyboardType="numeric" error={errorFor('tenureYears')} />
             </View>
             <View style={styles.flex1}>
               <FormField label="Months" value={String(draft.tenureMonths ?? '')} onChangeText={set('tenureMonths')} keyboardType="numeric" />
@@ -73,7 +95,7 @@ export default function AddEditFdScreen({ route }: Props) {
               <FormField label="Days" value={String(draft.tenureDays ?? '')} onChangeText={set('tenureDays')} keyboardType="numeric" />
             </View>
           </View>
-          <FormField label="Interest rate (% p.a.)" value={String(draft.interestRate ?? '')} onChangeText={set('interestRate')} keyboardType="numeric" />
+          <FormField label="Interest rate (% p.a.)" value={String(draft.interestRate ?? '')} onChangeText={set('interestRate')} keyboardType="numeric" error={errorFor('interestRate')} />
           <FormSelect label="Interest type" value={draft.interestType ?? 'Compound'} options={['Simple', 'Compound']} onChange={set('interestType')} />
           <FormSelect label="Compounding frequency" value={draft.compoundingFrequency ?? COMPOUNDING_FREQUENCIES[0]} options={COMPOUNDING_FREQUENCIES} onChange={set('compoundingFrequency')} />
         </Card>
@@ -102,7 +124,7 @@ export default function AddEditFdScreen({ route }: Props) {
           </Text>
         </LinearGradient>
 
-        <Pressable onPress={() => actions.saveDraftFD(id)}>
+        <Pressable onPress={handleSave} style={({ pressed }) => (pressed ? styles.pressed : undefined)}>
           <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.saveBtn}>
             <Text style={styles.saveText}>Save FD</Text>
           </LinearGradient>
@@ -161,5 +183,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: fontFamily.bold,
     fontSize: 15,
+  },
+  pressed: {
+    opacity: 0.85,
   },
 });

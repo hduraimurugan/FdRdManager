@@ -3,6 +3,8 @@
 // the events/notifications lists that used to be static mock arrays. Nothing here is
 // persisted — it's recomputed on every read, so it's always correct against the real
 // current date.
+//
+// Date and interest math delegates to src/data/finance.ts — see that file's header.
 
 import { StoredFd, StoredRd } from './db';
 import {
@@ -13,85 +15,90 @@ import {
   daysBetween,
   calcRD,
 } from './portfolioData';
-
-const FREQ_N: Record<string, number> = { Monthly: 12, Quarterly: 4, 'Half-Yearly': 2, Yearly: 1 };
-const FREQ_MONTHS: Record<string, number> = { Monthly: 1, Quarterly: 3, 'Half-Yearly': 6, Yearly: 12 };
+import {
+  today as financeToday,
+  toIsoDate,
+  addTenure as financeAddTenure,
+  addMonthsClamped,
+  parseIsoDate,
+  isPayoutFd,
+  payoutPerPeriod,
+  payoutSchedule,
+  payoutInterestTotal,
+  fdAccruedAmount,
+  rdAccruedAmount,
+} from './finance';
 
 /** Today, normalized to local midnight so date-only comparisons are stable all day. */
 export function today(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return financeToday();
 }
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-function toIso(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-function addTenure(start: Date, years: number, months: number, days: number): Date {
-  const d = new Date(start);
-  d.setFullYear(d.getFullYear() + Number(years || 0));
-  d.setMonth(d.getMonth() + Number(months || 0));
-  d.setDate(d.getDate() + Number(days || 0));
-  return d;
-}
+const toIso = toIsoDate;
+const addTenure = financeAddTenure;
 
 // ---------------------------------------------------------------------------
 // Fixed Deposits
 // ---------------------------------------------------------------------------
 export function deriveFd(stored: StoredFd, now: Date): FixedDeposit {
-  const start = new Date(stored.startDate);
+  const start = parseIsoDate(stored.startDate);
   const maturity = addTenure(start, stored.tenureYears, stored.tenureMonths, stored.tenureDays);
+  const maturityDate = toIso(maturity);
   const totalDays = Math.max(1, daysBetween(start, maturity));
   const elapsedDays = clamp(daysBetween(start, now), 0, totalDays);
   const daysRemaining = daysBetween(now, maturity);
-  const n = FREQ_N[stored.compoundingFrequency] || 4;
-  const isPayoutFD = stored.interestPayoutMode !== 'At Maturity';
+  const isPayoutFD = isPayoutFd(stored.interestPayoutMode);
   const principal = stored.principalAmount;
   const rate = stored.interestRate;
   const totalYears = totalDays / 365;
   const elapsedYears = elapsedDays / 365;
 
-  const maturityAmount = isPayoutFD ? principal : Math.round(principal * Math.pow(1 + rate / 100 / n, n * totalYears));
+  const effectiveStatus = stored.status === 'Active' && daysRemaining < 0 ? 'Matured' : stored.status;
 
   let currentValue: number;
   let interestEarnedSoFar: number;
+  let interestEarnedTotal: number;
+  let maturityAmount: number;
   let nextPayoutAmount: number | null = null;
   let nextPayoutDate: string | null = null;
 
-  const effectiveStatus = stored.status === 'Active' && daysRemaining < 0 ? 'Matured' : stored.status;
-
   if (isPayoutFD) {
+    // Payout FDs never grow beyond principal — interest is paid out each period, not
+    // reinvested, so "current value" and "maturity value" are both just the principal.
+    // Lifetime interest is the sum of what's actually paid out over the schedule, not
+    // maturityAmount - principal (which used to be 0 - 0 = 0 for every payout FD).
+    maturityAmount = principal;
     currentValue = principal;
-    const periodDays = 365 / n;
-    const elapsedPeriods = Math.floor(elapsedDays / periodDays);
-    nextPayoutAmount = Math.round(principal * (rate / 100) / n);
-    interestEarnedSoFar = nextPayoutAmount * elapsedPeriods;
+    const perPayout = Math.round(payoutPerPeriod(principal, rate, stored.interestPayoutMode));
+    const schedule = payoutSchedule(stored.startDate, stored.interestPayoutMode, maturityDate);
+    const elapsedPayouts = schedule.filter(d => parseIsoDate(d) <= now).length;
+    nextPayoutAmount = perPayout;
+    interestEarnedSoFar = perPayout * elapsedPayouts;
+    interestEarnedTotal = Math.round(payoutInterestTotal(principal, rate, stored.interestPayoutMode, stored.startDate, maturityDate));
     if (effectiveStatus === 'Active') {
-      const periodMonths = FREQ_MONTHS[stored.interestPayoutMode] || 3;
-      const scheduled = new Date(start);
-      while (scheduled <= now) scheduled.setMonth(scheduled.getMonth() + periodMonths);
-      if (scheduled <= maturity) nextPayoutDate = toIso(scheduled);
+      nextPayoutDate = schedule.find(d => parseIsoDate(d) > now) ?? null;
     }
   } else {
-    currentValue = Math.round(principal * Math.pow(1 + rate / 100 / n, n * elapsedYears));
+    maturityAmount = Math.round(fdAccruedAmount(principal, rate, stored.interestType, stored.compoundingFrequency, totalYears));
+    currentValue = Math.round(fdAccruedAmount(principal, rate, stored.interestType, stored.compoundingFrequency, elapsedYears));
     interestEarnedSoFar = currentValue - principal;
+    interestEarnedTotal = maturityAmount - principal;
   }
 
   return {
     ...stored,
     status: effectiveStatus,
-    maturityDate: toIso(maturity),
+    maturityDate,
     totalDays,
     elapsedDays,
     daysRemaining,
     maturityAmount,
     currentValue,
-    interestEarnedTotal: maturityAmount - principal,
+    interestEarnedTotal,
     interestEarnedSoFar,
     isPayoutFD,
     nextPayoutAmount: isPayoutFD && effectiveStatus === 'Active' ? nextPayoutAmount : null,
@@ -110,14 +117,13 @@ function monthsElapsed(start: Date, now: Date): number {
 
 /** How many monthly installments are due as of `now` for an RD starting on `startDate`. */
 export function computeInstallmentsDue(startDate: string, totalMonths: number, now: Date): number {
-  return clamp(monthsElapsed(new Date(startDate), now) + 1, 0, Math.max(0, totalMonths));
+  return clamp(monthsElapsed(parseIsoDate(startDate), now) + 1, 0, Math.max(0, totalMonths));
 }
 
 export function deriveRd(stored: StoredRd, now: Date): RecurringDeposit {
-  const start = new Date(stored.startDate);
+  const start = parseIsoDate(stored.startDate);
   const totalMonths = stored.tenureYears * 12 + stored.tenureMonths;
-  const maturity = new Date(start);
-  maturity.setMonth(maturity.getMonth() + totalMonths);
+  const maturity = addMonthsClamped(start, totalMonths);
   const daysRemaining = daysBetween(now, maturity);
   const effectiveStatus = stored.status === 'Active' && daysRemaining < 0 ? 'Matured' : stored.status;
 
@@ -134,14 +140,16 @@ export function deriveRd(stored: StoredRd, now: Date): RecurringDeposit {
     months: stored.tenureMonths,
   });
   const paid = stored.installmentsPaid;
-  const interestEarnedSoFar = Math.round((stored.monthlyInstallment * (stored.interestRate / 100) * paid * (paid + 1)) / 24);
-  const currentValue = totalDeposited + interestEarnedSoFar;
+  // Same bank formula as the maturity figure (full.maturityAmount), applied to the
+  // instalments actually paid so far — previously this used a different, simple-interest
+  // approximation than the maturity value, so partial progress and the final figure
+  // disagreed on methodology even before the maturity formula itself was wrong.
+  const currentValue = Math.round(rdAccruedAmount(stored.monthlyInstallment, stored.interestRate, paid));
+  const interestEarnedSoFar = currentValue - totalDeposited;
 
   let nextInstallmentDate: string | null = null;
   if (effectiveStatus === 'Active' && stored.installmentsPaid < installmentsTotal) {
-    const due = new Date(start);
-    due.setMonth(due.getMonth() + stored.installmentsPaid);
-    nextInstallmentDate = toIso(due);
+    nextInstallmentDate = toIso(addMonthsClamped(start, stored.installmentsPaid));
   }
 
   return {

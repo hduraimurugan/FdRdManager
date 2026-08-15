@@ -12,6 +12,7 @@ export default function FormSelect({
   onChange,
   placeholder = 'Select',
   renderOptionIcon,
+  error,
 }: {
   label: string;
   value: string;
@@ -19,6 +20,7 @@ export default function FormSelect({
   onChange: (value: string) => void;
   placeholder?: string;
   renderOptionIcon?: (option: string) => React.ReactNode;
+  error?: string;
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
@@ -26,7 +28,7 @@ export default function FormSelect({
   return (
     <View style={styles.wrap}>
       <Text style={[styles.label, { color: theme.textMuted }]}>{label}</Text>
-      <Pressable onPress={() => setOpen(true)} style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+      <Pressable onPress={() => setOpen(true)} style={[styles.input, { backgroundColor: theme.inputBg, borderColor: error ? theme.danger : theme.border }]}>
         <View style={styles.optionLeft}>
           {value ? renderOptionIcon?.(value) : null}
           <Text style={[styles.value, { color: value ? theme.text : theme.textFaint }]} numberOfLines={1}>
@@ -35,6 +37,7 @@ export default function FormSelect({
         </View>
         <IconChevronDown size={15} color={theme.textFaint} />
       </Pressable>
+      {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
       <BottomSheet visible={open} onClose={() => setOpen(false)} sheetStyle={styles.sheet}>
         <Text style={[styles.sheetTitle, { color: theme.text }]}>{label}</Text>
         <ScrollView style={styles.optionList}>
@@ -81,6 +84,10 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     fontSize: 14,
     flex: 1,
+  },
+  error: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11.5,
   },
   optionLeft: {
     flexDirection: 'row',

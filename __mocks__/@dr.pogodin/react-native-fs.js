@@ -5,4 +5,5 @@ module.exports = {
   CachesDirectoryPath: '/mock/caches',
   writeFile: jest.fn(async () => {}),
   readFile: jest.fn(async () => ''),
+  unlink: jest.fn(async () => {}),
 };

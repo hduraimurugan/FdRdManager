@@ -9,4 +9,8 @@ export type RootStackParamList = {
   Notifications: undefined;
   MaturityTimeline: undefined;
   BackupRestore: undefined;
+  ClearData: undefined;
+  Security: undefined;
+  PinSetup: { mode: 'setup' | 'change' };
+  Reminders: undefined;
 };

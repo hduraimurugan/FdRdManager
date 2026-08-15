@@ -1,0 +1,78 @@
+// Pure logic for local maturity reminders — which OS-level notifications *should* exist
+// right now, given the portfolio and the user's reminder settings. No RN or native
+// imports, so this is unit-testable without mocking notifee.
+//
+// Like everything else in this app's data layer, reminders are *derived*, not stored:
+// nothing about a scheduled notification is persisted as its own record. AppContext
+// recomputes this plan and reconciles it against whatever's actually scheduled (see
+// notifeeClient.ts's syncScheduledReminders) every time portfolio data changes, and
+// again whenever the app returns to the foreground.
+//
+// That resync-on-foreground behavior is also this app's answer to "reschedule on boot":
+// there's no native BroadcastReceiver for BOOT_COMPLETED, so a reminder scheduled before
+// a reboot the user never manually starts the app after won't fire. Rather than add a
+// permission (RECEIVE_BOOT_COMPLETED) and native code for a receiver, the plan is that
+// opening the app resyncs everything — true on every cold start and every foreground.
+// This is a real, documented limitation, not an oversight — see the README.
+
+import { FixedDeposit, RecurringDeposit, formatINR } from './portfolioData';
+import { addDays, parseIsoDate } from './finance';
+
+export const REMINDER_ID_PREFIX = 'maturity-reminder-';
+export const LEAD_DAYS_OPTIONS = [1, 3, 7, 14] as const;
+export const DEFAULT_LEAD_DAYS = 3;
+
+export interface ReminderSettings {
+  enabled: boolean;
+  leadDays: number;
+}
+
+export interface PlannedReminder {
+  /** Stable and deterministic — the same FD/RD always produces the same id, so
+   * re-planning naturally updates (rather than duplicates) its scheduled notification. */
+  id: string;
+  title: string;
+  body: string;
+  /** 'YYYY-MM-DD' — the calendar day the reminder should fire on. */
+  fireDate: string;
+  recordId: string;
+  kind: 'FD' | 'RD';
+}
+
+function fdReminder(fd: FixedDeposit, leadDays: number): PlannedReminder | null {
+  if (fd.status !== 'Active') return null;
+  return {
+    id: `${REMINDER_ID_PREFIX}fd-${fd.id}`,
+    title: `${fd.fdNumber} matures in ${leadDays} day${leadDays === 1 ? '' : 's'}`,
+    body: `${fd.bankName} · ${formatINR(fd.maturityAmount)}`,
+    fireDate: addDays(fd.maturityDate, -leadDays),
+    recordId: fd.id,
+    kind: 'FD',
+  };
+}
+
+function rdReminder(rd: RecurringDeposit, leadDays: number): PlannedReminder | null {
+  if (rd.status !== 'Active') return null;
+  return {
+    id: `${REMINDER_ID_PREFIX}rd-${rd.id}`,
+    title: `${rd.rdNumber} matures in ${leadDays} day${leadDays === 1 ? '' : 's'}`,
+    body: `${rd.bankName} · ${formatINR(rd.maturityAmount)}`,
+    fireDate: addDays(rd.maturityDate, -leadDays),
+    recordId: rd.id,
+    kind: 'RD',
+  };
+}
+
+/** Every reminder that should be scheduled right now: one per active FD/RD, `leadDays`
+ * before its maturity date, excluding anything whose reminder date has already passed
+ * (an already-overdue reminder isn't worth surfacing — the in-app Notifications screen
+ * already covers "matures soon"/"matured" for anything currently open in the app). */
+export function planReminders(fds: FixedDeposit[], rds: RecurringDeposit[], settings: ReminderSettings, now: Date): PlannedReminder[] {
+  if (!settings.enabled) return [];
+  const today = parseIsoDate(now);
+
+  const fdReminders = fds.map(fd => fdReminder(fd, settings.leadDays)).filter((r): r is PlannedReminder => r !== null);
+  const rdReminders = rds.map(rd => rdReminder(rd, settings.leadDays)).filter((r): r is PlannedReminder => r !== null);
+
+  return [...fdReminders, ...rdReminders].filter(r => parseIsoDate(r.fireDate) >= today);
+}

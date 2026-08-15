@@ -4,6 +4,7 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { formatDate } from '../data/portfolioData';
+import { parseIsoDate, toIsoDate } from '../data/finance';
 import { IconCalendar } from './icons/Icons';
 import BottomSheet from './BottomSheet';
 
@@ -12,21 +13,20 @@ export default function DateField({
   label,
   value,
   onChange,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  error?: string;
 }) {
   const theme = useTheme();
   const [iosOpen, setIosOpen] = useState(false);
   const [iosPending, setIosPending] = useState<Date | null>(null);
 
-  const dateValue = value ? new Date(value + 'T00:00:00') : new Date();
+  const dateValue = value ? parseIsoDate(value) : new Date();
 
-  const toIso = (d: Date) => {
-    const offsetMs = d.getTimezoneOffset() * 60000;
-    return new Date(d.getTime() - offsetMs).toISOString().slice(0, 10);
-  };
+  const toIso = toIsoDate;
 
   const openPicker = () => {
     if (Platform.OS === 'android') {
@@ -46,10 +46,11 @@ export default function DateField({
   return (
     <View style={styles.wrap}>
       <Text style={[styles.label, { color: theme.textMuted }]}>{label}</Text>
-      <Pressable onPress={openPicker} style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+      <Pressable onPress={openPicker} style={[styles.input, { backgroundColor: theme.inputBg, borderColor: error ? theme.danger : theme.border }]}>
         <Text style={[styles.value, { color: value ? theme.text : theme.textFaint }]}>{value ? formatDate(value, 'medium') : 'Select date'}</Text>
         <IconCalendar size={15} color={theme.textFaint} />
       </Pressable>
+      {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
 
       {Platform.OS === 'ios' && (
         <BottomSheet visible={iosOpen} onClose={() => setIosOpen(false)} sheetStyle={styles.sheet}>
@@ -98,6 +99,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  error: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11.5,
   },
   value: {
     fontFamily: fontFamily.regular,

@@ -117,7 +117,7 @@ export function coerceStoredRd(raw: unknown): StoredRd | null {
 
 export type ValidateBackupResult =
   | { ok: true; fds: StoredFd[]; rds: StoredRd[]; settings: Record<string, string>; skippedCount: number }
-  | { ok: false; reason: 'parse' | 'shape' | 'empty' };
+  | { ok: false; reason: 'parse' | 'shape' | 'empty' | 'app' | 'version' };
 
 export function validateBackupJson(raw: string): ValidateBackupResult {
   let parsed: unknown;
@@ -129,6 +129,17 @@ export function validateBackupJson(raw: string): ValidateBackupResult {
 
   if (!isRecord(parsed) || !Array.isArray(parsed.fixedDeposits) || !Array.isArray(parsed.recurringDeposits)) {
     return { ok: false, reason: 'shape' };
+  }
+
+  // Only reject when these fields are present and wrong — a hand-edited or otherwise
+  // slightly older file that simply omits them isn't worth bouncing, but a file stamped
+  // with a different app id, or a future schemaVersion this build doesn't know how to
+  // interpret, must not be silently imported as if it were understood.
+  if (parsed.app !== undefined && parsed.app !== BACKUP_APP_ID) {
+    return { ok: false, reason: 'app' };
+  }
+  if (typeof parsed.schemaVersion === 'number' && parsed.schemaVersion > BACKUP_SCHEMA_VERSION) {
+    return { ok: false, reason: 'version' };
   }
 
   const rawFds = parsed.fixedDeposits as unknown[];
@@ -148,4 +159,51 @@ export function validateBackupJson(raw: string): ValidateBackupResult {
   }
 
   return { ok: true, fds, rds, settings, skippedCount };
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate detection / import preview — lets the user see what a restore will
+// actually do (and choose to skip existing records) before it touches the database.
+// ---------------------------------------------------------------------------
+export interface ImportPreview {
+  newCount: number;
+  overwriteCount: number;
+  skippedCount: number;
+  total: number;
+}
+
+export function computeImportPreview(
+  fds: StoredFd[],
+  rds: StoredRd[],
+  existingFds: StoredFd[],
+  existingRds: StoredRd[],
+  skippedCount: number,
+): ImportPreview {
+  const existingFdIds = new Set(existingFds.map(f => f.id));
+  const existingRdIds = new Set(existingRds.map(r => r.id));
+  const overwriteCount = fds.filter(f => existingFdIds.has(f.id)).length + rds.filter(r => existingRdIds.has(r.id)).length;
+  const total = fds.length + rds.length;
+  return { newCount: total - overwriteCount, overwriteCount, skippedCount, total };
+}
+
+export type ImportMode = 'overwrite' | 'skip-existing';
+
+/** Filters a validated backup's records down to what should actually be written,
+ * given the user's chosen conflict-resolution mode. `db.ts`'s importAll always upserts
+ * by id — the choice of whether an existing id gets overwritten is made here, before
+ * the records ever reach the database, so importAll itself stays a simple, honest upsert. */
+export function filterForImport(
+  fds: StoredFd[],
+  rds: StoredRd[],
+  existingFds: StoredFd[],
+  existingRds: StoredRd[],
+  mode: ImportMode,
+): { fds: StoredFd[]; rds: StoredRd[] } {
+  if (mode === 'overwrite') return { fds, rds };
+  const existingFdIds = new Set(existingFds.map(f => f.id));
+  const existingRdIds = new Set(existingRds.map(r => r.id));
+  return {
+    fds: fds.filter(f => !existingFdIds.has(f.id)),
+    rds: rds.filter(r => !existingRdIds.has(r.id)),
+  };
 }

@@ -12,6 +12,10 @@ import RdCalculatorScreen from '../screens/RdCalculatorScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import MaturityTimelineScreen from '../screens/MaturityTimelineScreen';
 import BackupRestoreScreen from '../screens/BackupRestoreScreen';
+import ClearDataScreen from '../screens/ClearDataScreen';
+import SecuritySettingsScreen from '../screens/SecuritySettingsScreen';
+import PinSetupScreen from '../screens/PinSetupScreen';
+import ReminderSettingsScreen from '../screens/ReminderSettingsScreen';
 import { NavigationContainer } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -51,6 +55,10 @@ export default function RootNavigator() {
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="MaturityTimeline" component={MaturityTimelineScreen} />
         <Stack.Screen name="BackupRestore" component={BackupRestoreScreen} />
+        <Stack.Screen name="ClearData" component={ClearDataScreen} />
+        <Stack.Screen name="Security" component={SecuritySettingsScreen} />
+        <Stack.Screen name="PinSetup" component={PinSetupScreen} />
+        <Stack.Screen name="Reminders" component={ReminderSettingsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

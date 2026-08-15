@@ -6,7 +6,7 @@ import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import Card from '../components/Card';
-import { IconBell, IconCalendar, IconDownload, IconInfo, IconChevronRight, IconSun, IconMoon } from '../components/icons/Icons';
+import { IconBell, IconCalendar, IconClock, IconDownload, IconInfo, IconChevronRight, IconSun, IconMoon, IconWarning, IconLock } from '../components/icons/Icons';
 
 function SegButton({
   label,
@@ -63,11 +63,25 @@ export default function MoreScreen() {
           <Text style={[styles.rowLabel, { color: theme.text }]}>Maturity timeline</Text>
           <IconChevronRight size={15} color={theme.textFaint} />
         </Pressable>
+        <Pressable onPress={actions.goReminderSettings} style={[styles.row, { borderBottomColor: theme.divider, borderBottomWidth: 1 }]}>
+          <View style={[styles.rowIcon, { backgroundColor: 'rgba(201,134,26,0.15)' }]}>
+            <IconClock size={16} color={theme.warning} />
+          </View>
+          <Text style={[styles.rowLabel, { color: theme.text }]}>Maturity reminders</Text>
+          <IconChevronRight size={15} color={theme.textFaint} />
+        </Pressable>
         <Pressable onPress={actions.goBackupRestore} style={[styles.row, { borderBottomColor: theme.divider, borderBottomWidth: 1 }]}>
           <View style={[styles.rowIcon, { backgroundColor: 'rgba(91,158,224,0.15)' }]}>
             <IconDownload size={17} color="#5b9ee0" />
           </View>
           <Text style={[styles.rowLabel, { color: theme.text }]}>Backup & Restore</Text>
+          <IconChevronRight size={15} color={theme.textFaint} />
+        </Pressable>
+        <Pressable onPress={actions.goSecurity} style={[styles.row, { borderBottomColor: theme.divider, borderBottomWidth: 1 }]}>
+          <View style={[styles.rowIcon, { backgroundColor: 'rgba(14,164,114,0.13)' }]}>
+            <IconLock size={16} color={theme.success} />
+          </View>
+          <Text style={[styles.rowLabel, { color: theme.text }]}>Security</Text>
           <IconChevronRight size={15} color={theme.textFaint} />
         </Pressable>
         <Pressable onPress={actions.toastComingSoon} style={styles.row}>
@@ -85,6 +99,19 @@ export default function MoreScreen() {
           <SegButton label="Light" active={state.theme === 'light'} onPress={actions.setThemeLight} icon={<IconSun color={state.theme === 'light' ? '#fff' : theme.textMuted} />} />
           <SegButton label="Dark" active={state.theme === 'dark'} onPress={actions.setThemeDark} icon={<IconMoon color={state.theme === 'dark' ? '#fff' : theme.textMuted} />} />
         </View>
+      </View>
+
+      <View>
+        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Data</Text>
+        <Card style={styles.listCard}>
+          <Pressable onPress={actions.goClearData} style={styles.row}>
+            <View style={[styles.rowIcon, { backgroundColor: 'rgba(226,73,90,0.12)' }]}>
+              <IconWarning size={17} color={theme.danger} />
+            </View>
+            <Text style={[styles.rowLabel, { color: theme.danger }]}>Delete all data</Text>
+            <IconChevronRight size={15} color={theme.textFaint} />
+          </Pressable>
+        </Card>
       </View>
 
       <Text style={[styles.footer, { color: theme.textFaint }]}>FD/RD Portfolio Manager · v1.0</Text>

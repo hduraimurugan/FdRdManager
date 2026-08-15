@@ -96,7 +96,12 @@ function getDb(): DB {
   return dbInstance;
 }
 
-async function migrate(): Promise<void> {
+/** Exported so tests can re-run it directly against an already-populated database —
+ * bypassing openDb()'s promise cache — to verify that re-running migrate() on every
+ * app launch (which is what happens for real) never touches existing rows once a
+ * version's migration has already applied. Not meant to be called by app code; use
+ * openDb() there. */
+export async function migrate(): Promise<void> {
   const database = getDb();
   const versionResult = await database.execute('PRAGMA user_version');
   const currentVersion = Number(versionResult.rows[0]?.user_version ?? 0);
@@ -333,5 +338,17 @@ export async function importAll(fds: StoredFd[], rds: StoredRd[], settings: Reco
         [key, value],
       );
     }
+  });
+}
+
+/** Permanently deletes every FD, RD, and setting. Irreversible — the caller (the
+ * "Delete all data" flow) is responsible for confirming with the user first. Runs in a
+ * transaction so a mid-way failure can't leave the database partially wiped. */
+export async function deleteAllData(): Promise<void> {
+  const database = getDb();
+  await database.transaction(async tx => {
+    await tx.execute('DELETE FROM fixed_deposits');
+    await tx.execute('DELETE FROM recurring_deposits');
+    await tx.execute('DELETE FROM settings');
   });
 }

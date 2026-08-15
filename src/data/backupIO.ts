@@ -6,7 +6,7 @@
 // exercised; react-native-share and @react-native-documents/picker both ship
 // iOS support, but wiring/testing it needs a Mac (pod install, Xcode).
 
-import { CachesDirectoryPath, writeFile } from '@dr.pogodin/react-native-fs';
+import { CachesDirectoryPath, writeFile, unlink } from '@dr.pogodin/react-native-fs';
 import Share from 'react-native-share';
 import { pick, types, errorCodes, isErrorWithCode } from '@react-native-documents/picker';
 
@@ -27,6 +27,20 @@ export async function shareBackupFile(path: string, filename: string): Promise<v
   } catch {
     // User cancelled, or the share sheet itself failed — the backup file is
     // already safely written to disk either way, so there's nothing to report.
+  }
+}
+
+/** Removes the exported backup from the cache directory once it's been handed to the
+ * share sheet. The file briefly held every field in the user's portfolio (account
+ * numbers, holder names) in plaintext or encrypted form — no reason to leave it sitting
+ * in cache indefinitely once the share flow is done with it. Safe to call even if the
+ * share sheet already cleaned it up itself; a missing file is not an error here. */
+export async function deleteBackupFile(path: string): Promise<void> {
+  try {
+    await unlink(path);
+  } catch {
+    // Already gone, or the OS is still holding a handle open via the share sheet —
+    // either way there's nothing actionable for the caller to do.
   }
 }
 

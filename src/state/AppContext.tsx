@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import { AppState as RNAppState, AppStateStatus } from 'react-native';
 import { FixedDeposit, RecurringDeposit, PortfolioEvent, PortfolioNotification } from '../data/portfolioData';
 import {
   StoredFd,
@@ -13,11 +14,25 @@ import {
   setSetting,
   getAllSettings,
   importAll,
+  deleteAllData,
 } from '../data/db';
 import { today, deriveFd, deriveRd, deriveEvents, deriveNotifications } from '../data/derive';
+import { todayIso } from '../data/finance';
 import { navigate, goBack } from '../navigation/navigationRef';
-import { backupFilename, buildBackupEnvelope, serializeBackup, validateBackupJson } from '../data/backupSchema';
-import { writeBackupFile, shareBackupFile, pickBackupFileText } from '../data/backupIO';
+import {
+  backupFilename,
+  buildBackupEnvelope,
+  serializeBackup,
+  validateBackupJson,
+  computeImportPreview,
+  filterForImport,
+  ImportMode,
+} from '../data/backupSchema';
+import { writeBackupFile, shareBackupFile, deleteBackupFile, pickBackupFileText } from '../data/backupIO';
+import { encryptBackupJson, decryptBackupJson, isEncryptedPayload } from '../data/backupCrypto';
+import { planReminders, DEFAULT_LEAD_DAYS } from '../data/reminders';
+import { syncScheduledReminders, cancelAllReminders, hasNotificationPermission, requestNotificationPermission } from '../data/notifeeClient';
+import { useLockActions } from './LockContext';
 
 export type ActiveTab = 'home' | 'portfolio' | 'payouts' | 'calculators' | 'more';
 export type SortBy = 'maturity' | 'amount' | 'rate';
@@ -29,6 +44,10 @@ export interface ConfirmDialogState {
   title: string;
   message: string;
   confirmLabel: string;
+  /** When set, the dialog renders a second action button (see ConfirmDialog.tsx) wired
+   * to runConfirmSecondary — used by the import flow to offer "skip existing" as an
+   * alternative to the primary "overwrite" action. */
+  secondaryLabel?: string;
 }
 
 export interface PendingImport {
@@ -89,6 +108,15 @@ interface RawState {
   exporting: boolean;
   importing: boolean;
   pendingImport: PendingImport | null;
+  /** Raw text of a picked backup file that turned out to be passphrase-encrypted —
+   * held here (not re-read from disk) so submitting a passphrase doesn't have to
+   * re-open the file picker. Non-null while BackupRestoreScreen's passphrase sheet
+   * should be showing. */
+  pendingEncryptedImportText: string | null;
+  passphraseError: string | null;
+  remindersEnabled: boolean;
+  reminderLeadDays: number;
+  notificationPermissionGranted: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +131,98 @@ export interface AppState extends Omit<RawState, 'fdRaw' | 'rdRaw'> {
   notifications: PortfolioNotification[];
 }
 
-const todayIso = () => today().toISOString().slice(0, 10);
+// This used to be `today().toISOString().slice(0, 10)`, which converts local midnight
+// through UTC and returns *yesterday's* date for anyone in a positive-UTC-offset
+// timezone (all of India included) — see finance.ts's todayIso for the fix. That value
+// is written to the database as the default startDate/depositDate for new records and
+// as the new startDate on every renewal, so the bug wasn't just cosmetic.
+
+/** Shared by runConfirm (overwrite mode) and runConfirmSecondary (skip-existing mode) —
+ * filters the pending backup down to what the chosen mode should actually write, then
+ * applies it. Returns what was actually written so the caller's toast reflects reality
+ * rather than the backup's raw counts (which may include records the mode skipped). */
+async function applyPendingImport(
+  pending: PendingImport,
+  mode: ImportMode,
+  existingFds: StoredFd[],
+  existingRds: StoredRd[],
+): Promise<{ fdCount: number; rdCount: number }> {
+  const { fds, rds } = filterForImport(pending.fds, pending.rds, existingFds, existingRds, mode);
+  await importAll(fds, rds, pending.settings);
+  return { fdCount: fds.length, rdCount: rds.length };
+}
+
+const IMPORT_ERROR_MESSAGES: Record<Exclude<ReturnType<typeof validateBackupJson>, { ok: true }>['reason'], string> = {
+  parse: "That file isn't a valid FD/RD backup",
+  shape: "That file isn't a valid FD/RD backup",
+  empty: 'No valid FD/RD entries found in that file',
+  app: "That file wasn't exported from FD/RD Manager",
+  version: 'That backup was made by a newer version of the app — update the app to restore it',
+};
+
+/** Shared by importBackup (first attempt) and submitImportPassphrase (retry with a
+ * passphrase) — detects an encrypted payload and, once past that, runs the same
+ * validate → preview → confirm-dialog flow either way. Dispatches
+ * SET_PENDING_ENCRYPTED_IMPORT_TEXT to open the passphrase sheet when a passphrase is
+ * needed but wasn't supplied, rather than returning an error — the file was read fine,
+ * it just needs one more step before it can be validated. */
+async function processImportText(
+  text: string,
+  passphrase: string | undefined,
+  dispatch: React.Dispatch<Action>,
+  showToast: (message: string) => void,
+  existingFds: StoredFd[],
+  existingRds: StoredRd[],
+): Promise<void> {
+  let jsonText = text;
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // Not JSON at all — validateBackupJson below will report this as a parse failure.
+  }
+
+  if (isEncryptedPayload(parsed)) {
+    if (!passphrase) {
+      dispatch({ type: 'SET_PENDING_ENCRYPTED_IMPORT_TEXT', text });
+      return;
+    }
+    const decrypted = await decryptBackupJson(parsed, passphrase);
+    if (decrypted == null) {
+      dispatch({ type: 'SET_PASSPHRASE_ERROR', error: 'Incorrect passphrase' });
+      return;
+    }
+    jsonText = decrypted;
+  }
+
+  dispatch({ type: 'SET_PENDING_ENCRYPTED_IMPORT_TEXT', text: null });
+
+  const result = validateBackupJson(jsonText);
+  if (!result.ok) {
+    showToast(IMPORT_ERROR_MESSAGES[result.reason]);
+    return;
+  }
+
+  dispatch({ type: 'SET_PENDING_IMPORT', data: { fds: result.fds, rds: result.rds, settings: result.settings } });
+
+  const preview = computeImportPreview(result.fds, result.rds, existingFds, existingRds, result.skippedCount);
+  const parts = [`${preview.newCount} new`];
+  if (preview.overwriteCount > 0) parts.push(`${preview.overwriteCount} will overwrite an existing entry`);
+  if (preview.skippedCount > 0) parts.push(`${preview.skippedCount} skipped (invalid)`);
+
+  dispatch({
+    type: 'ASK_CONFIRM',
+    dialog: {
+      action: 'import',
+      kind: 'ALL',
+      id: '',
+      title: 'Restore backup?',
+      message: `This backup has ${parts.join(', ')}. Nothing is ever deleted by restoring.`,
+      confirmLabel: preview.overwriteCount > 0 ? 'Overwrite & restore' : 'Restore',
+      secondaryLabel: preview.overwriteCount > 0 ? 'Skip existing' : undefined,
+    },
+  });
+}
 
 function blankFdDraft(fdRaw: StoredFd[]): Draft {
   return {
@@ -156,10 +275,23 @@ const initialState: RawState = {
   exporting: false,
   importing: false,
   pendingImport: null,
+  pendingEncryptedImportText: null,
+  passphraseError: null,
+  remindersEnabled: false,
+  reminderLeadDays: DEFAULT_LEAD_DAYS,
+  notificationPermissionGranted: false,
 };
 
 type Action =
-  | { type: 'HYDRATE'; fdRaw: StoredFd[]; rdRaw: StoredRd[]; theme: 'light' | 'dark' | null }
+  | {
+      type: 'HYDRATE';
+      fdRaw: StoredFd[];
+      rdRaw: StoredRd[];
+      theme: 'light' | 'dark' | null;
+      remindersEnabled: boolean;
+      reminderLeadDays: number;
+      notificationPermissionGranted: boolean;
+    }
   | { type: 'LOAD_ERROR' }
   | { type: 'SET_TAB'; tab: ActiveTab }
   | { type: 'SET_PORTFOLIO_TAB'; tab: 'FD' | 'RD' }
@@ -192,12 +324,27 @@ type Action =
   | { type: 'SET_RD_CALC_FIELD'; field: keyof RdCalcState; value: any }
   | { type: 'SET_EXPORTING'; value: boolean }
   | { type: 'SET_IMPORTING'; value: boolean }
-  | { type: 'SET_PENDING_IMPORT'; data: PendingImport | null };
+  | { type: 'SET_PENDING_IMPORT'; data: PendingImport | null }
+  | { type: 'SET_PENDING_ENCRYPTED_IMPORT_TEXT'; text: string | null }
+  | { type: 'SET_PASSPHRASE_ERROR'; error: string | null }
+  | { type: 'SET_REMINDERS_ENABLED'; enabled: boolean }
+  | { type: 'SET_REMINDER_LEAD_DAYS'; days: number }
+  | { type: 'SET_NOTIFICATION_PERMISSION'; granted: boolean };
 
 function reducer(state: RawState, action: Action): RawState {
   switch (action.type) {
     case 'HYDRATE':
-      return { ...state, fdRaw: action.fdRaw, rdRaw: action.rdRaw, theme: action.theme === 'dark' ? 'dark' : 'light', hydrated: true, loadError: false };
+      return {
+        ...state,
+        fdRaw: action.fdRaw,
+        rdRaw: action.rdRaw,
+        theme: action.theme === 'dark' ? 'dark' : 'light',
+        remindersEnabled: action.remindersEnabled,
+        reminderLeadDays: action.reminderLeadDays,
+        notificationPermissionGranted: action.notificationPermissionGranted,
+        hydrated: true,
+        loadError: false,
+      };
     case 'LOAD_ERROR':
       return { ...state, hydrated: true, loadError: true };
     case 'SET_TAB':
@@ -286,6 +433,16 @@ function reducer(state: RawState, action: Action): RawState {
       return { ...state, importing: action.value };
     case 'SET_PENDING_IMPORT':
       return { ...state, pendingImport: action.data };
+    case 'SET_PENDING_ENCRYPTED_IMPORT_TEXT':
+      return { ...state, pendingEncryptedImportText: action.text, passphraseError: null };
+    case 'SET_PASSPHRASE_ERROR':
+      return { ...state, passphraseError: action.error };
+    case 'SET_REMINDERS_ENABLED':
+      return { ...state, remindersEnabled: action.enabled };
+    case 'SET_REMINDER_LEAD_DAYS':
+      return { ...state, reminderLeadDays: action.days };
+    case 'SET_NOTIFICATION_PERMISSION':
+      return { ...state, notificationPermissionGranted: action.granted };
     default:
       return state;
   }
@@ -372,8 +529,19 @@ export interface AppActions {
   goMaturityTimeline: () => void;
   goNotifications: () => void;
   goBackupRestore: () => void;
-  exportBackup: () => void;
+  goClearData: () => void;
+  goSecurity: () => void;
+  goPinSetup: (mode: 'setup' | 'change') => void;
+  goReminderSettings: () => void;
+  /** Returns false if the user enabled reminders but denied the OS permission prompt —
+   * the screen should show guidance rather than silently leaving the toggle stuck off. */
+  setRemindersEnabled: (enabled: boolean) => Promise<boolean>;
+  setReminderLeadDays: (days: number) => void;
+  exportBackup: (passphrase?: string) => void;
   importBackup: () => void;
+  submitImportPassphrase: (passphrase: string) => void;
+  cancelImportPassphrase: () => void;
+  clearAllData: () => void;
   toastComingSoon: () => void;
   openFDDetail: (id: string) => void;
   openRDDetail: (id: string) => void;
@@ -393,6 +561,7 @@ export interface AppActions {
   askConfirm: (action: ConfirmDialogState['action'], kind: 'FD' | 'RD', id: string, title: string, message: string, confirmLabel: string) => void;
   closeConfirm: () => void;
   runConfirm: () => void;
+  runConfirmSecondary: () => void;
   fcSet: (field: keyof FdCalcState) => (value: any) => void;
   rcSet: (field: keyof RdCalcState) => (value: any) => void;
   back: () => void;
@@ -403,18 +572,37 @@ const StateContext = createContext<RawState>(initialState);
 const ActionsContext = createContext<AppActions | null>(null);
 
 const THEME_KEY = 'theme';
+const REMINDERS_ENABLED_KEY = 'remindersEnabled';
+const REMINDER_LEAD_DAYS_KEY = 'reminderLeadDays';
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // AppProvider renders inside LockProvider (see App.tsx) specifically so clearAllData
+  // can re-sync lock state after wiping the settings table it lives in.
+  const lockActions = useLockActions();
 
   const load = useCallback(async () => {
     try {
       await openDb();
-      const [{ fds, rds }, themeSetting] = await Promise.all([loadAll(), getSetting(THEME_KEY)]);
-      dispatch({ type: 'HYDRATE', fdRaw: fds, rdRaw: rds, theme: themeSetting === 'dark' ? 'dark' : 'light' });
+      const [{ fds, rds }, themeSetting, remindersEnabledRaw, leadDaysRaw, notificationPermissionGranted] = await Promise.all([
+        loadAll(),
+        getSetting(THEME_KEY),
+        getSetting(REMINDERS_ENABLED_KEY),
+        getSetting(REMINDER_LEAD_DAYS_KEY),
+        hasNotificationPermission(),
+      ]);
+      dispatch({
+        type: 'HYDRATE',
+        fdRaw: fds,
+        rdRaw: rds,
+        theme: themeSetting === 'dark' ? 'dark' : 'light',
+        remindersEnabled: remindersEnabledRaw === 'true',
+        reminderLeadDays: Number(leadDaysRaw) || DEFAULT_LEAD_DAYS,
+        notificationPermissionGranted,
+      });
     } catch {
       dispatch({ type: 'LOAD_ERROR' });
     }
@@ -454,17 +642,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     goMaturityTimeline: () => navigate('MaturityTimeline'),
     goNotifications: () => navigate('Notifications'),
     goBackupRestore: () => navigate('BackupRestore'),
-    exportBackup: async () => {
+    goClearData: () => navigate('ClearData'),
+    goSecurity: () => navigate('Security'),
+    goPinSetup: mode => navigate('PinSetup', { mode }),
+    goReminderSettings: () => navigate('Reminders'),
+    setRemindersEnabled: async enabled => {
+      if (enabled) {
+        const granted = await requestNotificationPermission();
+        dispatch({ type: 'SET_NOTIFICATION_PERMISSION', granted });
+        if (!granted) return false;
+      }
+      dispatch({ type: 'SET_REMINDERS_ENABLED', enabled });
+      setSetting(REMINDERS_ENABLED_KEY, enabled ? 'true' : 'false').catch(() => {});
+      if (!enabled) cancelAllReminders().catch(() => {});
+      return true;
+    },
+    setReminderLeadDays: days => {
+      dispatch({ type: 'SET_REMINDER_LEAD_DAYS', days });
+      setSetting(REMINDER_LEAD_DAYS_KEY, String(days)).catch(() => {});
+    },
+    exportBackup: async passphrase => {
       dispatch({ type: 'SET_EXPORTING', value: true });
+      let path: string | null = null;
       try {
         const settings = await getAllSettings();
         const envelope = buildBackupEnvelope(stateRef.current.fdRaw, stateRef.current.rdRaw, settings);
+        const json = serializeBackup(envelope);
+        const content = passphrase ? JSON.stringify(await encryptBackupJson(json, passphrase)) : json;
         const filename = backupFilename();
-        const path = await writeBackupFile(serializeBackup(envelope), filename);
+        path = await writeBackupFile(content, filename);
         await shareBackupFile(path, filename);
       } catch {
         showToast('Export failed — try again');
       } finally {
+        // The file briefly held the whole portfolio (plaintext or encrypted) in the
+        // cache directory — clean it up now that the share sheet is done with it.
+        if (path) deleteBackupFile(path).catch(() => {});
         dispatch({ type: 'SET_EXPORTING', value: false });
       }
     },
@@ -473,27 +686,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         const text = await pickBackupFileText();
         if (text == null) return; // user cancelled the picker
-        const result = validateBackupJson(text);
-        if (!result.ok) {
-          showToast(result.reason === 'empty' ? 'No valid FD/RD entries found in that file' : "That file isn't a valid FD/RD backup");
-          return;
-        }
-        dispatch({ type: 'SET_PENDING_IMPORT', data: { fds: result.fds, rds: result.rds, settings: result.settings } });
-        dispatch({
-          type: 'ASK_CONFIRM',
-          dialog: {
-            action: 'import',
-            kind: 'ALL',
-            id: '',
-            title: 'Restore backup?',
-            message: `This will add ${result.fds.length} FD(s) and ${result.rds.length} RD(s). Existing entries with a matching ID will be overwritten with the backup's data — nothing is deleted.`,
-            confirmLabel: 'Restore',
-          },
-        });
+        await processImportText(text, undefined, dispatch, showToast, stateRef.current.fdRaw, stateRef.current.rdRaw);
       } catch {
         showToast('Could not read that file');
       } finally {
         dispatch({ type: 'SET_IMPORTING', value: false });
+      }
+    },
+    submitImportPassphrase: async passphrase => {
+      const text = stateRef.current.pendingEncryptedImportText;
+      if (!text) return;
+      dispatch({ type: 'SET_IMPORTING', value: true });
+      try {
+        await processImportText(text, passphrase, dispatch, showToast, stateRef.current.fdRaw, stateRef.current.rdRaw);
+      } catch {
+        showToast('Could not read that file');
+      } finally {
+        dispatch({ type: 'SET_IMPORTING', value: false });
+      }
+    },
+    cancelImportPassphrase: () => dispatch({ type: 'SET_PENDING_ENCRYPTED_IMPORT_TEXT', text: null }),
+    clearAllData: async () => {
+      try {
+        await deleteAllData();
+        // deleteAllData wipes the whole settings table, including the PIN/lock
+        // settings LockContext owns — without this, LockContext would keep thinking a
+        // PIN is still configured after the row backing it is gone.
+        await lockActions.refreshAfterExternalWipe();
+        await load();
+        goBack();
+        showToast('All data deleted');
+      } catch {
+        showToast('Delete failed — try again');
       }
     },
     toastComingSoon: () => showToast('Coming soon'),
@@ -578,12 +802,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const pending = stateRef.current.pendingImport;
         dispatch({ type: 'CLOSE_CONFIRM' });
         if (pending) {
-          const fdCount = pending.fds.length;
-          const rdCount = pending.rds.length;
           dispatch({ type: 'SET_IMPORTING', value: true });
-          importAll(pending.fds, pending.rds, pending.settings)
-            .then(load)
-            .then(() => showToast(`Backup restored — ${fdCount} FD(s), ${rdCount} RD(s)`))
+          applyPendingImport(pending, 'overwrite', stateRef.current.fdRaw, stateRef.current.rdRaw)
+            .then(({ fdCount, rdCount }) =>
+              load().then(() => showToast(fdCount + rdCount > 0 ? `Backup restored — ${fdCount} FD(s), ${rdCount} RD(s)` : 'Nothing to restore')),
+            )
             .catch(() => showToast('Import failed — your existing data was not changed'))
             .finally(() => dispatch({ type: 'SET_IMPORTING', value: false }));
         }
@@ -608,17 +831,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
+    runConfirmSecondary: () => {
+      const c = stateRef.current.confirmDialog;
+      if (!c || c.action !== 'import') return; // the only action that currently offers a secondary button
+      const pending = stateRef.current.pendingImport;
+      dispatch({ type: 'CLOSE_CONFIRM' });
+      if (!pending) return;
+      dispatch({ type: 'SET_IMPORTING', value: true });
+      applyPendingImport(pending, 'skip-existing', stateRef.current.fdRaw, stateRef.current.rdRaw)
+        .then(({ fdCount, rdCount }) =>
+          load().then(() => showToast(fdCount + rdCount > 0 ? `Backup restored — ${fdCount} FD(s), ${rdCount} RD(s)` : 'Nothing new to restore')),
+        )
+        .catch(() => showToast('Import failed — your existing data was not changed'))
+        .finally(() => dispatch({ type: 'SET_IMPORTING', value: false }));
+    },
     fcSet: field => value => dispatch({ type: 'SET_FD_CALC_FIELD', field, value }),
     rcSet: field => value => dispatch({ type: 'SET_RD_CALC_FIELD', field, value }),
     back: () => goBack(),
     retryLoad: () => load(),
-  }), [showToast, load]);
+  }), [showToast, load, lockActions]);
 
   return (
     <StateContext.Provider value={state}>
-      <ActionsContext.Provider value={actions}>{children}</ActionsContext.Provider>
+      <ActionsContext.Provider value={actions}>
+        {children}
+        <ReminderSync />
+      </ActionsContext.Provider>
     </StateContext.Provider>
   );
+}
+
+/** Recomputes the reminder plan and reconciles it against what's actually scheduled
+ * whenever portfolio data or reminder settings change, and again whenever the app
+ * returns to the foreground — this app's substitute for a native boot receiver (see
+ * reminders.ts's header comment). Renders nothing; exists purely for the side effect,
+ * inside the providers so it can read the same derived fdList/rdList every other
+ * consumer sees. */
+function ReminderSync() {
+  const state = useAppState();
+
+  useEffect(() => {
+    if (!state.hydrated) return;
+    const planned = planReminders(state.fdList, state.rdList, { enabled: state.remindersEnabled, leadDays: state.reminderLeadDays }, today());
+    syncScheduledReminders(planned).catch(() => {});
+  }, [state.hydrated, state.remindersEnabled, state.reminderLeadDays, state.fdList, state.rdList]);
+
+  useEffect(() => {
+    const sub = RNAppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next !== 'active' || !state.hydrated || !state.remindersEnabled) return;
+      const planned = planReminders(state.fdList, state.rdList, { enabled: state.remindersEnabled, leadDays: state.reminderLeadDays }, today());
+      syncScheduledReminders(planned).catch(() => {});
+    });
+    return () => sub.remove();
+  }, [state.hydrated, state.remindersEnabled, state.reminderLeadDays, state.fdList, state.rdList]);
+
+  return null;
 }
 
 export function useAppState(): AppState {

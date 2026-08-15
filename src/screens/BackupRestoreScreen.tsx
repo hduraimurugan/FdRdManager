@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
@@ -7,12 +7,52 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
-import { IconDownload, IconImport } from '../components/icons/Icons';
+import BottomSheet from '../components/BottomSheet';
+import { IconDownload, IconImport, IconLock } from '../components/icons/Icons';
+
+const MIN_PASSPHRASE_LENGTH = 6;
 
 export default function BackupRestoreScreen() {
   const theme = useTheme();
   const state = useAppState();
   const actions = useAppActions();
+
+  const [encryptExport, setEncryptExport] = useState(false);
+  const [exportSheetOpen, setExportSheetOpen] = useState(false);
+  const [exportPassphrase, setExportPassphrase] = useState('');
+  const [exportPassphraseConfirm, setExportPassphraseConfirm] = useState('');
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const [importPassphrase, setImportPassphrase] = useState('');
+
+  const startExport = () => {
+    if (encryptExport) {
+      setExportPassphrase('');
+      setExportPassphraseConfirm('');
+      setExportError(null);
+      setExportSheetOpen(true);
+      return;
+    }
+    actions.exportBackup();
+  };
+
+  const confirmEncryptedExport = () => {
+    if (exportPassphrase.length < MIN_PASSPHRASE_LENGTH) {
+      setExportError(`Passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters`);
+      return;
+    }
+    if (exportPassphrase !== exportPassphraseConfirm) {
+      setExportError("Passphrases don't match");
+      return;
+    }
+    setExportSheetOpen(false);
+    actions.exportBackup(exportPassphrase);
+  };
+
+  const submitImportPassphrase = () => {
+    actions.submitImportPassphrase(importPassphrase);
+    setImportPassphrase('');
+  };
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
@@ -27,8 +67,22 @@ export default function BackupRestoreScreen() {
             Save your {state.fdList.length} FD{state.fdList.length === 1 ? '' : 's'} and {state.rdList.length} RD
             {state.rdList.length === 1 ? '' : 's'} as a file you can send to Drive, email, or another phone.
           </Text>
+
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLabelRow}>
+              <IconLock size={13} color={theme.textMuted} />
+              <Text style={[styles.toggleLabel, { color: theme.text }]}>Encrypt with a passphrase</Text>
+            </View>
+            <Switch value={encryptExport} onValueChange={setEncryptExport} />
+          </View>
+          {!encryptExport && (
+            <Text style={[styles.warning, { color: theme.warning }]}>
+              Without a passphrase, this file is plain text — anyone who gets it can read every field.
+            </Text>
+          )}
+
           <Pressable
-            onPress={actions.exportBackup}
+            onPress={startExport}
             disabled={state.exporting}
             style={({ pressed }) => [styles.ctaShadowWrap, { shadowColor: theme.accent, opacity: pressed || state.exporting ? 0.7 : 1 }]}
           >
@@ -55,6 +109,62 @@ export default function BackupRestoreScreen() {
           </Pressable>
         </Card>
       </View>
+
+      <BottomSheet visible={exportSheetOpen} onClose={() => setExportSheetOpen(false)}>
+        <Text style={[styles.sheetTitle, { color: theme.text }]}>Set a passphrase</Text>
+        <Text style={[styles.sheetSubtitle, { color: theme.textMuted }]}>
+          You'll need this exact passphrase to restore the file later. There's no way to recover it if you forget it.
+        </Text>
+        <TextInput
+          value={exportPassphrase}
+          onChangeText={text => {
+            setExportPassphrase(text);
+            setExportError(null);
+          }}
+          secureTextEntry
+          autoFocus
+          placeholder="Passphrase"
+          placeholderTextColor={theme.textFaint}
+          style={[styles.textInput, { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text }]}
+        />
+        <TextInput
+          value={exportPassphraseConfirm}
+          onChangeText={text => {
+            setExportPassphraseConfirm(text);
+            setExportError(null);
+          }}
+          secureTextEntry
+          placeholder="Confirm passphrase"
+          placeholderTextColor={theme.textFaint}
+          style={[styles.textInput, { backgroundColor: theme.inputBg, borderColor: exportError ? theme.danger : theme.border, color: theme.text }]}
+        />
+        {exportError ? <Text style={[styles.error, { color: theme.danger }]}>{exportError}</Text> : null}
+        <Pressable onPress={confirmEncryptedExport} style={styles.sheetBtnWrap}>
+          <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.cta}>
+            <Text style={styles.ctaText}>Export encrypted file</Text>
+          </LinearGradient>
+        </Pressable>
+      </BottomSheet>
+
+      <BottomSheet visible={state.pendingEncryptedImportText !== null} onClose={actions.cancelImportPassphrase}>
+        <Text style={[styles.sheetTitle, { color: theme.text }]}>This backup is encrypted</Text>
+        <Text style={[styles.sheetSubtitle, { color: theme.textMuted }]}>Enter the passphrase it was exported with.</Text>
+        <TextInput
+          value={importPassphrase}
+          onChangeText={setImportPassphrase}
+          secureTextEntry
+          autoFocus
+          placeholder="Passphrase"
+          placeholderTextColor={theme.textFaint}
+          style={[styles.textInput, { backgroundColor: theme.inputBg, borderColor: state.passphraseError ? theme.danger : theme.border, color: theme.text }]}
+        />
+        {state.passphraseError ? <Text style={[styles.error, { color: theme.danger }]}>{state.passphraseError}</Text> : null}
+        <Pressable onPress={submitImportPassphrase} disabled={state.importing} style={styles.sheetBtnWrap}>
+          <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.cta}>
+            <Text style={styles.ctaText}>{state.importing ? 'Decrypting…' : 'Continue'}</Text>
+          </LinearGradient>
+        </Pressable>
+      </BottomSheet>
     </View>
   );
 }
@@ -85,6 +195,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  toggleLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  toggleLabel: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13.5,
+  },
+  warning: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: -4,
+  },
   ctaShadowWrap: {
     marginTop: 4,
     borderRadius: 14,
@@ -113,5 +244,33 @@ const styles = StyleSheet.create({
   outlineBtnText: {
     fontFamily: fontFamily.semibold,
     fontSize: 14,
+  },
+  sheetTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  sheetSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  error: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  sheetBtnWrap: {
+    marginTop: 4,
   },
 });

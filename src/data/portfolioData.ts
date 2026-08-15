@@ -5,6 +5,21 @@
 // smaller subset — see `StoredFd`/`StoredRd` in `src/data/db.ts` — and `src/data/derive.ts`
 // computes the rest (maturity date/amount, current value, interest earned, days
 // remaining, status, next payout/installment, ...) fresh against today's date every time.
+//
+// All date arithmetic and interest formulas below delegate to `src/data/finance.ts`, the
+// single source of truth for this app's FD/RD math — see that file's header for why.
+
+import {
+  fdMaturityDate,
+  simpleAmount,
+  compoundAmount,
+  rdMaturityDate,
+  rdMaturityAmount,
+  rdInterestTotal,
+  daysBetween as financeDaysBetween,
+  parseIsoDate,
+  finiteOr,
+} from './finance';
 
 export interface FixedDeposit {
   id: string;
@@ -148,7 +163,10 @@ export function formatCompactINR(n: number | null | undefined): string {
 
 export function formatDate(iso: string | null | undefined, style: 'medium' | 'short' | 'monthYear' = 'medium'): string {
   if (!iso) return '—';
-  const dt = new Date(iso);
+  // parseIsoDate reads local calendar components — new Date(iso) parses ISO date-only
+  // strings as UTC midnight, which rolls the displayed date back a day for anyone west
+  // of Greenwich (e.g. NRE/NRO account holders viewing their FDs from the US).
+  const dt = parseIsoDate(iso);
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   if (style === 'short') return `${dt.getDate()} ${months[dt.getMonth()]} ${dt.getFullYear()}`;
   if (style === 'monthYear') return `${months[dt.getMonth()]} ${dt.getFullYear()}`;
@@ -156,10 +174,8 @@ export function formatDate(iso: string | null | undefined, style: 'medium' | 'sh
 }
 
 export function daysBetween(a: Date | string, b: Date | string): number {
-  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+  return financeDaysBetween(a, b);
 }
-
-const FREQ_N: Record<string, number> = { Monthly: 12, Quarterly: 4, 'Half-Yearly': 2, Yearly: 1 };
 
 export interface CalcFDInput {
   principal: number;
@@ -197,28 +213,23 @@ export function calcFD({
   principal, ratePct, startDate, years = 0, months = 0, days = 0,
   compounding = 'Quarterly', tdsPercent = 10,
 }: CalcFDInput): CalcFDResult {
-  const start = new Date(startDate);
-  const maturity = new Date(start);
-  maturity.setFullYear(maturity.getFullYear() + Number(years || 0));
-  maturity.setMonth(maturity.getMonth() + Number(months || 0));
-  maturity.setDate(maturity.getDate() + Number(days || 0));
-  const totalDays = daysBetween(start, maturity);
+  const maturityDate = fdMaturityDate(startDate, years, months, days);
+  const totalDays = daysBetween(startDate, maturityDate);
   const totalYears = totalDays / 365;
-  const r = ratePct / 100;
-  const simpleInterest = principal * r * totalYears;
-  const n = FREQ_N[compounding] || 4;
-  const compoundAmount = principal * Math.pow(1 + r / n, n * totalYears);
-  const compoundInterest = compoundAmount - principal;
-  const simpleMaturity = principal + simpleInterest;
-  const compoundMaturity = compoundAmount;
-  const effectiveYield = (Math.pow(compoundAmount / principal, 1 / Math.max(totalYears, 0.0001)) - 1) * 100;
+  const simpleMaturity = simpleAmount(principal, ratePct, totalYears);
+  const simpleInterest = simpleMaturity - principal;
+  const compoundMaturity = principal > 0 ? compoundAmount(principal, ratePct, compounding, totalYears) : principal;
+  const compoundInterest = compoundMaturity - principal;
+  const effectiveYield = principal > 0
+    ? finiteOr((Math.pow(compoundMaturity / principal, 1 / Math.max(totalYears, 0.0001)) - 1) * 100)
+    : 0;
   const interestPerMonth = compoundInterest / Math.max(totalDays / 30.44, 0.0001);
   const interestPerQuarter = interestPerMonth * 3;
   const interestPerYear = compoundInterest / Math.max(totalYears, 0.0001);
   const afterTaxInterest = compoundInterest * (1 - tdsPercent / 100);
-  const roi = (compoundInterest / principal) * 100;
+  const roi = principal > 0 ? finiteOr((compoundInterest / principal) * 100) : 0;
   return {
-    maturityDate: maturity.toISOString().slice(0, 10), totalDays, totalYears,
+    maturityDate, totalDays, totalYears,
     simpleInterest, compoundInterest, simpleMaturity, compoundMaturity,
     effectiveYield, interestPerMonth, interestPerQuarter, interestPerYear,
     afterTaxInterest, roi,
@@ -244,18 +255,18 @@ export interface CalcRDResult {
   effectiveYield: number;
 }
 
-// RD calculator — approximate bank convention (interest on reducing balance, quarterly compounding)
+// RD calculator — standard Indian bank convention: quarterly compounding on each
+// instalment for the time it's actually on deposit. See finance.ts's rdMaturityAmount
+// for the formula and why it replaced the old simple-interest approximation.
 export function calcRD({ monthlyInstallment, ratePct, startDate, years = 0, months = 0 }: CalcRDInput): CalcRDResult {
-  const start = new Date(startDate);
   const totalMonths = Number(years || 0) * 12 + Number(months || 0);
-  const maturity = new Date(start);
-  maturity.setMonth(maturity.getMonth() + totalMonths);
+  const maturityDate = rdMaturityDate(startDate, totalMonths);
   const totalDeposited = monthlyInstallment * totalMonths;
-  const interestEarned = monthlyInstallment * (ratePct / 100) * totalMonths * (totalMonths + 1) / 24;
-  const maturityAmount = totalDeposited + interestEarned;
+  const interestEarned = rdInterestTotal(monthlyInstallment, ratePct, totalMonths);
+  const maturityAmount = totalDeposited > 0 ? rdMaturityAmount(monthlyInstallment, ratePct, totalMonths) : 0;
   return {
-    maturityDate: maturity.toISOString().slice(0, 10), totalMonths, totalDeposited,
+    maturityDate, totalMonths, totalDeposited,
     interestEarned, maturityAmount,
-    effectiveYield: (interestEarned / totalDeposited) * 100 * (12 / Math.max(totalMonths, 1)),
+    effectiveYield: totalDeposited > 0 ? finiteOr((interestEarned / totalDeposited) * 100 * (12 / Math.max(totalMonths, 1))) : 0,
   };
 }

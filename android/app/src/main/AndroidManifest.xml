@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Runtime-requested on Android 13+ (API 33+) before the first local maturity
+         reminder is scheduled — see src/data/notifeeClient.ts's requestNotificationPermission.
+         Declaring it here only makes the runtime prompt possible; it does not grant it. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
       android:name=".MainApplication"

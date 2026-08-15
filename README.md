@@ -16,6 +16,7 @@ A React Native app for tracking Fixed Deposit (FD) and Recurring Deposit (RD) in
 - [Metro connection issues on a physical device](#metro-connection-issues-on-a-physical-device)
 - [Everyday scripts](#everyday-scripts)
 - [Data & persistence](#data--persistence)
+- [Maturity reminders](#maturity-reminders)
 - [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 
@@ -26,9 +27,13 @@ A React Native app for tracking Fixed Deposit (FD) and Recurring Deposit (RD) in
 - **Payouts** — overdue, due-today, this-week, this-month and upcoming payouts/installments, grouped.
 - **Calculators** — standalone FD (simple vs. compound) and RD calculators, independent of your saved data.
 - **Notifications** & **Maturity timeline** — cross-linked to the relevant FD/RD.
+- **Maturity reminders** — optional local (on-device only) OS notification 1/3/7/14 days before an FD/RD matures.
+- **App lock** — optional PIN, with optional biometric unlock as a shortcut; lock-on-background with a configurable grace period.
+- **Backup & Restore** — export to a JSON file (optionally passphrase-encrypted with AES-256-GCM) and restore from one, with a preview of new vs. overwritten records and a choice to skip existing ones.
+- **Delete all data** — a typed-confirmation full wipe (More → Data).
 - **More** — light/dark theme toggle (persisted).
 
-Everything you enter is stored locally on-device in SQLite (see [Data & persistence](#data--persistence)) — there is no backend, and nothing leaves the device.
+Everything you enter is stored locally on-device in SQLite (see [Data & persistence](#data--persistence)) — there is no backend, and nothing leaves the device. Reminder notifications are scheduled entirely on-device too.
 
 ## Tech stack
 
@@ -39,24 +44,38 @@ Everything you enter is stored locally on-device in SQLite (see [Data & persiste
 - `react-native-svg` for icons and the investment-by-type donut chart
 - `react-native-linear-gradient` for all gradient fills
 - `react-native-safe-area-context`, `react-native-screens`, `react-native-gesture-handler`
+- `@noble/hashes` + `@noble/ciphers` (pure JS/TS, no native code) for PIN hashing (PBKDF2-SHA256) and encrypted-backup crypto (AES-256-GCM); `react-native-get-random-values` polyfills the `crypto.getRandomValues` they need (Hermes doesn't provide it)
+- `react-native-biometrics` for biometric unlock — depends only on AndroidX `androidx.biometric` / Apple's `LocalAuthentication`, no Google Play Services
+- `@notifee/react-native` for local maturity-reminder notifications — used strictly for on-device trigger notifications, never Firebase Cloud Messaging, so it stays Google-Play-Services-free (verify this holds if the dependency is ever upgraded)
 - Bundled **Inter** font (Regular/Medium/SemiBold/Bold/ExtraBold), linked natively for both platforms
 - App state via a single `useReducer`-based context (`src/state/AppContext.tsx`) — no Redux/MobX/Zustand
+- App-lock state lives in its own context (`src/state/LockContext.tsx`), mounted above `AppContext` so it can gate the whole app before portfolio data even loads
 
 ## Project structure
 
 ```
-App.tsx                     Root: providers, navigation, global overlays (toast, confirm dialog)
+App.tsx                     Root: providers, navigation, global overlays (toast, confirm dialog), lock gate
 src/
   assets/fonts/              Bundled Inter .ttf files
   components/                Shared UI (Card, TopAppBar, BottomTabBar, FilterSheet, forms, DateField, icons/...)
   data/
-    portfolioData.ts          Types, reference lists (banks/types/...), formatters, FD/RD calculators
+    finance.ts                 Single source of truth for all date/interest math (FD/RD maturity, compounding, payouts)
+    portfolioData.ts          Types, reference lists (banks/types/...), formatters — delegates calculations to finance.ts
+    validation.ts              Add/Edit FD/RD form validation (pure)
     db.ts                     SQLite repository — the ONLY module that talks to the database
     derive.ts                 Turns stored rows + today's date into live values, events, notifications
+    backupSchema.ts            Backup envelope, validation, duplicate-detection/preview (pure)
+    backupCrypto.ts            Passphrase-encrypted backup payloads: PBKDF2 + AES-256-GCM (pure)
+    backupIO.ts                 Native file write/share/pick orchestration for backups
+    security.ts                 PIN hashing (PBKDF2-SHA256) + lockout-delay schedule (pure)
+    biometrics.ts               Thin wrapper around react-native-biometrics
+    reminders.ts                 Which maturity-reminder notifications should exist right now (pure)
+    notifeeClient.ts            Native notification scheduling (channel, permission, trigger notifications)
   navigation/                 Stack navigator, route param types, imperative nav ref
-  screens/                    One file per screen (Home, Portfolio, FdDetail, AddEditFD, ...)
+  screens/                    One file per screen (Home, Portfolio, FdDetail, AddEditFD, LockScreen, ...)
   state/
-    AppContext.tsx            App state (useReducer), persistence wiring, actions
+    AppContext.tsx            Portfolio app state (useReducer), persistence wiring, actions
+    LockContext.tsx             App-lock state (PIN/biometric/grace period) — separate from AppContext
     selectors.ts               Derived/decorated view data (status colors, filtering, metrics, charts)
   theme/                      Light/dark color tokens, gradients, font family constants
 ```
@@ -187,14 +206,24 @@ The app starts empty — add your own FDs and RDs from the Portfolio tab. Everyt
 
 Only what you actually enter is persisted (bank, principal, rate, tenure, dates, etc. — see `StoredFd`/`StoredRd` in `src/data/db.ts`). Time-dependent values — maturity date/amount, current value, interest earned so far, days remaining, effective status, next payout/installment date — are **never stored**; `src/data/derive.ts` recomputes them from your stored data against the real current date every time the app reads them, so a deposit's progress is always correct, not frozen at the moment you saved it. The Home "needs attention" list, Payouts screen, and Notifications screen are all derived the same way, not separate data.
 
-Deleting a deposit (from its detail screen, behind a confirmation dialog) permanently removes it from the database.
+Deleting a deposit (from its detail screen, behind a confirmation dialog) permanently removes it from the database. "Delete all data" (More → Data) wipes every FD, RD, and setting — including the app-lock PIN and reminder preferences, since those live in the same `settings` table — behind a typed "DELETE" confirmation.
 
 Theme preference is persisted too, so it survives an app restart.
+
+If an app lock PIN is set, only its PBKDF2-SHA256 hash and a random salt are stored (`src/data/security.ts`) — never the PIN itself. The database file otherwise is **not** encrypted at rest; app-private storage plus `android:allowBackup="false"` keep it away from other apps and cloud auto-backup, but a rooted device or a raw filesystem/ADB backup extraction can still read it.
+
+## Maturity reminders
+
+Reminders are computed the same "derive, don't store" way as everything else: nothing about a *scheduled notification* is persisted — `src/data/reminders.ts` recomputes which ones should exist right now from your current FD/RD data plus the reminder settings, and `src/state/AppContext.tsx` reconciles that against what's actually scheduled (via `@notifee/react-native`) every time portfolio data changes and every time the app returns to the foreground.
+
+That foreground resync is also this app's answer to "reschedule after a reboot": there is deliberately no native `BOOT_COMPLETED` receiver (that would need its own permission and native code for a feature reminders can already self-heal). **If the device reboots and you don't reopen the app before a reminder's scheduled time, that reminder won't fire.** Opening the app resyncs everything — true on every cold start and every return to the foreground.
 
 ## Known limitations
 
 - **RD installment tracking** is manual: you record how many installments you've actually paid on the Add/Edit RD screen; the app compares that against how many are due by today's date to compute "missed" — there's no automated bank-side sync.
 - **FD interest-payout tracking** is schedule-based, not receipt-tracked: "next payout" is always the next scheduled date rolled forward from the start date at the chosen frequency — there's no ledger of payouts actually received.
+- **Maturity reminders don't survive a reboot you don't reopen the app after** — see [Maturity reminders](#maturity-reminders) above.
+- **The on-device database is not encrypted at rest.** App lock protects the UI, not the underlying SQLite file.
 
 ## Troubleshooting
 

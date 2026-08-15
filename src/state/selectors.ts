@@ -9,6 +9,18 @@ import {
   daysBetween,
 } from '../data/portfolioData';
 import { today } from '../data/derive';
+import {
+  todayIso,
+  parseIsoDate,
+  addMonthsClamped,
+  fdMaturityDate,
+  fdAccruedAmount,
+  isPayoutFd,
+  payoutPerPeriod,
+  payoutSchedule,
+  rdMaturityDate,
+  rdMaturityAmount,
+} from '../data/finance';
 import { ThemeTokens, GradientSpec, TYPE_COLORS } from '../theme/colors';
 import { AppState } from './AppContext';
 
@@ -113,9 +125,6 @@ export function decorateFD(fd: FixedDeposit, theme: ThemeTokens): DecoratedFD {
 // FD statements — past interest payouts already received, derived on the fly
 // from the payout schedule (no separate ledger is persisted).
 // ---------------------------------------------------------------------------
-const PAYOUT_FREQ_MONTHS: Record<string, number> = { Monthly: 1, Quarterly: 3, 'Half-Yearly': 6, Yearly: 12 };
-const PAYOUT_FREQ_N: Record<string, number> = { Monthly: 12, Quarterly: 4, 'Half-Yearly': 2, Yearly: 1 };
-
 export interface FdStatementEntry {
   date: string;
   dateLabel: string;
@@ -124,25 +133,15 @@ export interface FdStatementEntry {
   index: number;
 }
 
+// Payout amount is keyed on interestPayoutMode (how often interest is actually paid),
+// not compoundingFrequency — see finance.ts's payoutPerPeriod for why those can differ.
 export function fdStatements(fd: FixedDeposit): FdStatementEntry[] {
   if (!fd.isPayoutFD) return [];
-  const periodMonths = PAYOUT_FREQ_MONTHS[fd.interestPayoutMode] || 3;
-  const n = PAYOUT_FREQ_N[fd.compoundingFrequency] || 4;
-  const perPayout = Math.round((fd.principalAmount * (fd.interestRate / 100)) / n);
-  const maturity = new Date(fd.maturityDate);
-  const now = today();
-  const cutoff = now < maturity ? now : maturity;
-  const entries: FdStatementEntry[] = [];
-  const scheduled = new Date(fd.startDate);
-  let idx = 0;
-  while (true) {
-    scheduled.setMonth(scheduled.getMonth() + periodMonths);
-    if (scheduled > cutoff) break;
-    idx += 1;
-    const iso = scheduled.toISOString().slice(0, 10);
-    entries.push({ date: iso, dateLabel: formatDate(iso), amount: perPayout, amountFmt: formatINR(perPayout, { signed: true }), index: idx });
-  }
-  return entries.reverse();
+  const perPayout = Math.round(payoutPerPeriod(fd.principalAmount, fd.interestRate, fd.interestPayoutMode));
+  const cutoff = today() < parseIsoDate(fd.maturityDate) ? todayIso() : fd.maturityDate;
+  return payoutSchedule(fd.startDate, fd.interestPayoutMode, cutoff)
+    .map((iso, i) => ({ date: iso, dateLabel: formatDate(iso), amount: perPayout, amountFmt: formatINR(perPayout, { signed: true }), index: i + 1 }))
+    .reverse();
 }
 
 export interface DecoratedRD extends RecurringDeposit {
@@ -236,7 +235,7 @@ export function homeMetrics(state: AppState) {
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
   const inThisMonth = (iso: string) => {
-    const dt = new Date(iso);
+    const dt = parseIsoDate(iso);
     return dt.getMonth() === thisMonth && dt.getFullYear() === thisYear;
   };
   const payoutsThisMonth = state.events.filter(e => (e.type === 'Interest' || e.type === 'Installment Due') && inThisMonth(e.date)).reduce((a, e) => a + e.amount, 0);
@@ -308,12 +307,11 @@ export function projectedInterest(state: AppState) {
   const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const buckets: { m: number; y: number; label: string; total: number }[] = [];
   for (let i = 0; i < 6; i++) {
-    const dt = today();
-    dt.setMonth(dt.getMonth() + i);
+    const dt = addMonthsClamped(today(), i);
     buckets.push({ m: dt.getMonth(), y: dt.getFullYear(), label: monthLabels[dt.getMonth()], total: 0 });
   }
   state.events.forEach(e => {
-    const dt = new Date(e.date);
+    const dt = parseIsoDate(e.date);
     const b = buckets.find(x => x.m === dt.getMonth() && x.y === dt.getFullYear());
     if (b && e.type === 'Interest') b.total += e.amount;
   });
@@ -334,8 +332,8 @@ export interface DecoratedEvent extends PortfolioEvent {
 
 export function payoutGroups(state: AppState, theme: ThemeTokens) {
   const now = today();
-  const isFuture = (iso: string) => new Date(iso) >= new Date(now.toDateString());
-  const daysOut = (iso: string) => Math.round((new Date(iso).getTime() - now.getTime()) / 86400000);
+  const isFuture = (iso: string) => parseIsoDate(iso) >= now;
+  const daysOut = (iso: string) => daysBetween(now, iso);
   const decorated: DecoratedEvent[] = state.events
     .filter(e => e.overdue || isFuture(e.date))
     .map(e => ({
@@ -378,34 +376,30 @@ export function decorateNotification(n: PortfolioNotification, theme: ThemeToken
 }
 
 // ---------------------------------------------------------------------------
-// FD / RD estimate (live, while editing) — same math as AppContext's save actions.
+// FD / RD estimate (live, while editing) — delegates to finance.ts, so the preview
+// shown while filling out the form matches what the record will actually derive to
+// once saved (previously this had its own, third copy of the maturity formulas that
+// had quietly drifted from both calcFD/calcRD and deriveFd/deriveRd).
 // ---------------------------------------------------------------------------
-const FREQ_N: Record<string, number> = { Monthly: 12, Quarterly: 4, 'Half-Yearly': 2, Yearly: 1 };
-
 export function fdEstimate(draft: Record<string, any>) {
   const principal = Number(draft.principalAmount) || 0;
   const rate = Number(draft.interestRate) || 0;
-  const start = new Date(draft.startDate || today());
-  const maturity = new Date(start);
-  maturity.setFullYear(maturity.getFullYear() + Number(draft.tenureYears || 0));
-  maturity.setMonth(maturity.getMonth() + Number(draft.tenureMonths || 0));
-  maturity.setDate(maturity.getDate() + Number(draft.tenureDays || 0));
-  const n = FREQ_N[draft.compoundingFrequency] || 4;
-  const totalYears = daysBetween(start, maturity) / 365;
-  const isPayout = draft.interestPayoutMode !== 'At Maturity';
-  const maturityAmount = isPayout ? principal : principal * Math.pow(1 + rate / 100 / n, n * totalYears);
-  return { maturityDateLabel: formatDate(maturity.toISOString().slice(0, 10), 'short'), maturityAmountFmt: formatINR(maturityAmount) };
+  const startDate = draft.startDate || todayIso();
+  const maturityDate = fdMaturityDate(startDate, Number(draft.tenureYears || 0), Number(draft.tenureMonths || 0), Number(draft.tenureDays || 0));
+  const totalYears = daysBetween(startDate, maturityDate) / 365;
+  const isPayout = isPayoutFd(draft.interestPayoutMode);
+  const maturityAmount = isPayout ? principal : fdAccruedAmount(principal, rate, draft.interestType, draft.compoundingFrequency, totalYears);
+  return { maturityDateLabel: formatDate(maturityDate, 'short'), maturityAmountFmt: formatINR(maturityAmount) };
 }
 
 export function rdEstimate(draft: Record<string, any>) {
   const installment = Number(draft.monthlyInstallment) || 0;
   const rate = Number(draft.interestRate) || 0;
   const totalMonths = Number(draft.tenureYears || 0) * 12 + Number(draft.tenureMonths || 0);
-  const start = new Date(draft.startDate || today());
-  const maturity = new Date(start);
-  maturity.setMonth(maturity.getMonth() + totalMonths);
-  const maturityAmount = installment * totalMonths + (installment * (rate / 100) * totalMonths * (totalMonths + 1)) / 24;
-  return { maturityDateLabel: formatDate(maturity.toISOString().slice(0, 10), 'short'), maturityAmountFmt: formatINR(maturityAmount) };
+  const startDate = draft.startDate || todayIso();
+  const maturityDate = rdMaturityDate(startDate, totalMonths);
+  const maturityAmount = totalMonths > 0 ? rdMaturityAmount(installment, rate, totalMonths) : 0;
+  return { maturityDateLabel: formatDate(maturityDate, 'short'), maturityAmountFmt: formatINR(maturityAmount) };
 }
 
 // ---------------------------------------------------------------------------
@@ -448,7 +442,7 @@ export function timelineMonths(state: AppState, theme: ThemeTokens): TimelineMon
   const monthLabels = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const buckets: Record<string, TimelineMonth> = {};
   items.forEach(it => {
-    const dt = new Date(it.date);
+    const dt = parseIsoDate(it.date);
     const key = dt.getFullYear() + '-' + dt.getMonth();
     if (!buckets[key]) buckets[key] = { label: monthLabels[dt.getMonth()] + ' ' + dt.getFullYear(), items: [], order: dt.getFullYear() * 12 + dt.getMonth() };
     buckets[key].items.push({

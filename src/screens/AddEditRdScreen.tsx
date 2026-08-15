@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import LinearGradient from 'react-native-linear-gradient';
@@ -8,6 +8,7 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { rdEstimate } from '../state/selectors';
 import { BANKS, COMPOUNDING_FREQUENCIES } from '../data/portfolioData';
 import { today, computeInstallmentsDue } from '../data/derive';
+import { validateRdDraft, isValidDraft } from '../data/validation';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { RootStackParamList } from '../navigation/types';
 import Card from '../components/Card';
@@ -28,7 +29,26 @@ export default function AddEditRdScreen({ route }: Props) {
   const { id } = route.params;
   const draft = state.editDraft || EMPTY_DRAFT;
   const estimate = useMemo(() => rdEstimate(draft), [draft]);
-  const set = (field: string) => (value: string) => actions.setDraftField(field, value);
+  const errors = useMemo(() => validateRdDraft(draft), [draft]);
+
+  // Same touched/attempted pattern as AddEditFdScreen — see its comment for why.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [attempted, setAttempted] = useState(false);
+  const errorFor = (field: string) => (attempted || touched[field] ? errors[field] : undefined);
+
+  const set = (field: string) => (value: string) => {
+    setTouched(t => (t[field] ? t : { ...t, [field]: true }));
+    actions.setDraftField(field, value);
+  };
+
+  const handleSave = () => {
+    if (!isValidDraft(errors)) {
+      setAttempted(true);
+      actions.showToast('Fix the highlighted fields before saving');
+      return;
+    }
+    actions.saveDraftRD(id);
+  };
 
   const totalMonths = Number(draft.tenureYears || 0) * 12 + Number(draft.tenureMonths || 0);
   const installmentsDue = draft.startDate ? computeInstallmentsDue(draft.startDate, totalMonths, today()) : 0;
@@ -41,7 +61,7 @@ export default function AddEditRdScreen({ route }: Props) {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Card style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Basic details</Text>
-          <FormField label="RD number" value={String(draft.rdNumber ?? '')} onChangeText={set('rdNumber')} />
+          <FormField label="RD number" value={String(draft.rdNumber ?? '')} onChangeText={set('rdNumber')} error={errorFor('rdNumber')} />
           <FormSelect
             label="Bank"
             value={draft.bankName ?? ''}
@@ -49,6 +69,7 @@ export default function AddEditRdScreen({ route }: Props) {
             onChange={set('bankName')}
             placeholder="Select bank"
             renderOptionIcon={bank => <BankLogo bankName={bank} size={28} />}
+            error={errorFor('bankName')}
           />
           <FormField label="Branch" value={String(draft.branch ?? '')} onChangeText={set('branch')} />
           <FormField label="Bank account number" value={String(draft.bankAccountNumber ?? '')} onChangeText={set('bankAccountNumber')} keyboardType="number-pad" />
@@ -61,17 +82,17 @@ export default function AddEditRdScreen({ route }: Props) {
 
         <Card style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Deposit &amp; tenure</Text>
-          <FormField label="Monthly installment (₹)" value={String(draft.monthlyInstallment ?? '')} onChangeText={set('monthlyInstallment')} keyboardType="numeric" />
+          <FormField label="Monthly installment (₹)" value={String(draft.monthlyInstallment ?? '')} onChangeText={set('monthlyInstallment')} keyboardType="numeric" error={errorFor('monthlyInstallment')} />
           <DateField label="Start date" value={String(draft.startDate ?? '')} onChange={set('startDate')} />
           <View style={styles.row2}>
             <View style={styles.flex1}>
-              <FormField label="Years" value={String(draft.tenureYears ?? '')} onChangeText={set('tenureYears')} keyboardType="numeric" />
+              <FormField label="Years" value={String(draft.tenureYears ?? '')} onChangeText={set('tenureYears')} keyboardType="numeric" error={errorFor('tenureYears')} />
             </View>
             <View style={styles.flex1}>
               <FormField label="Months" value={String(draft.tenureMonths ?? '')} onChangeText={set('tenureMonths')} keyboardType="numeric" />
             </View>
           </View>
-          <FormField label="Interest rate (% p.a.)" value={String(draft.interestRate ?? '')} onChangeText={set('interestRate')} keyboardType="numeric" />
+          <FormField label="Interest rate (% p.a.)" value={String(draft.interestRate ?? '')} onChangeText={set('interestRate')} keyboardType="numeric" error={errorFor('interestRate')} />
           <FormSelect label="Compounding frequency" value={draft.compoundingFrequency ?? COMPOUNDING_FREQUENCIES[0]} options={COMPOUNDING_FREQUENCIES} onChange={set('compoundingFrequency')} />
         </Card>
 
@@ -82,6 +103,7 @@ export default function AddEditRdScreen({ route }: Props) {
             value={String(draft.installmentsPaid ?? 0)}
             onChangeText={set('installmentsPaid')}
             keyboardType="numeric"
+            error={errorFor('installmentsPaid')}
           />
           {draft.startDate ? (
             <Text style={[styles.hint, { color: installmentsMissed > 0 ? theme.danger : theme.textFaint }]}>
@@ -98,7 +120,7 @@ export default function AddEditRdScreen({ route }: Props) {
           </Text>
         </LinearGradient>
 
-        <Pressable onPress={() => actions.saveDraftRD(id)}>
+        <Pressable onPress={handleSave} style={({ pressed }) => (pressed ? styles.pressed : undefined)}>
           <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.saveBtn}>
             <Text style={styles.saveText}>Save RD</Text>
           </LinearGradient>
@@ -162,5 +184,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: fontFamily.bold,
     fontSize: 15,
+  },
+  pressed: {
+    opacity: 0.85,
   },
 });
