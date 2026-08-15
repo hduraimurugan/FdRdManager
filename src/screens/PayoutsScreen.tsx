@@ -78,7 +78,8 @@ export default function PayoutsScreen() {
                         {e.bank} · {e.number}
                       </Text>
                       <Text style={[styles.eventSubtitle, { color: theme.textMuted }]}>
-                        {e.type} · {e.dateLabel}
+                        <Text style={[styles.eventTypeLabel, { color: e.amountColor }]}>{e.type}</Text>
+                        {' · ' + e.dateLabel}
                       </Text>
                     </View>
                     <Text style={[styles.eventAmount, { color: e.amountColor }]}>{e.amountFmt}</Text>
@@ -136,6 +137,9 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     fontSize: 12,
     marginTop: 2,
+  },
+  eventTypeLabel: {
+    fontFamily: fontFamily.semibold,
   },
   overdueSubtitle: {
     fontFamily: fontFamily.regular,
