@@ -344,6 +344,7 @@ export function payoutGroups(state: AppState, theme: ThemeTokens) {
       amountColor: e.type === 'Maturity (P+I)' ? theme.text : e.type === 'Installment Due' ? theme.textMuted : theme.success,
       kindBadgeBg: e.kind === 'FD' ? theme.accent : theme.success,
     }));
+  decorated.sort((a, b) => parseIsoDate(a.date).getTime() - parseIsoDate(b.date).getTime());
   const overdue = decorated.filter(e => e.overdue);
   const rest = decorated.filter(e => !e.overdue);
   const dueToday = rest.filter(e => e.dr === 0);
