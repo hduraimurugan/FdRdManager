@@ -45,7 +45,14 @@ function TabItem({
   }, [active, anim]);
 
   return (
-    <Pressable onPress={onPress} style={styles.item} hitSlop={4}>
+    <Pressable
+      onPress={onPress}
+      style={styles.item}
+      hitSlop={4}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+    >
       <View style={styles.iconStack}>
         <Animated.View style={[styles.iconLayer, { opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }]}>
           <Icon size={21} color={inactiveColor} />

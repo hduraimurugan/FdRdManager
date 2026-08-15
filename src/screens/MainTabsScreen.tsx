@@ -106,7 +106,10 @@ export default function MainTabsScreen() {
         </ScrollView>
 
         {state.activeTab === 'portfolio' && (
-          <Fab onPress={state.portfolioTab === 'FD' ? actions.openAddFD : actions.openAddRD} />
+          <Fab
+            onPress={state.portfolioTab === 'FD' ? actions.openAddFD : actions.openAddRD}
+            accessibilityLabel={state.portfolioTab === 'FD' ? 'Add FD' : 'Add RD'}
+          />
         )}
       </View>
       <BottomTabBar activeTab={state.activeTab} onChange={actions.setTab} />

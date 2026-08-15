@@ -26,7 +26,13 @@ export default function TopAppBar({
   return (
     <View style={[styles.row, { paddingTop: insets.top + 10, backgroundColor: theme.bg }]}>
       {showBack ? (
-        <Pressable onPress={onBack} style={[styles.iconBtn, { backgroundColor: theme.card }]} hitSlop={8}>
+        <Pressable
+          onPress={onBack}
+          style={[styles.iconBtn, { backgroundColor: theme.card }]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
           <IconBack color={theme.text} />
         </Pressable>
       ) : (
@@ -38,7 +44,13 @@ export default function TopAppBar({
         </Text>
       </View>
       {showBell ? (
-        <Pressable onPress={onBellPress} style={[styles.iconBtnRight, { backgroundColor: theme.card }]} hitSlop={8}>
+        <Pressable
+          onPress={onBellPress}
+          style={[styles.iconBtnRight, { backgroundColor: theme.card }]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+        >
           <IconBell color={theme.text} />
           {unreadCount > 0 && <View style={[styles.dot, { backgroundColor: theme.danger, borderColor: theme.bg }]} />}
         </Pressable>

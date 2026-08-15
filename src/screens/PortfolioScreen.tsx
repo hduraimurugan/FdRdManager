@@ -44,7 +44,13 @@ export default function PortfolioScreen() {
     <View style={styles.flex}>
       <View style={styles.controls}>
         <View style={styles.tabSwitch}>
-          <Pressable onPress={actions.setPortfolioTabFD} style={styles.tabBtnWrap}>
+          <Pressable
+            onPress={actions.setPortfolioTabFD}
+            style={styles.tabBtnWrap}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: kind === 'FD' }}
+            accessibilityLabel="Fixed Deposits"
+          >
             {kind === 'FD' ? (
               <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.tabBtn}>
                 <Text style={[styles.tabText, { color: '#fff' }]}>FD</Text>
@@ -55,7 +61,13 @@ export default function PortfolioScreen() {
               </View>
             )}
           </Pressable>
-          <Pressable onPress={actions.setPortfolioTabRD} style={styles.tabBtnWrap}>
+          <Pressable
+            onPress={actions.setPortfolioTabRD}
+            style={styles.tabBtnWrap}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: kind === 'RD' }}
+            accessibilityLabel="Recurring Deposits"
+          >
             {kind === 'RD' ? (
               <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.tabBtn}>
                 <Text style={[styles.tabText, { color: '#fff' }]}>RD</Text>
@@ -77,9 +89,15 @@ export default function PortfolioScreen() {
               placeholder="Search bank, number, holder"
               placeholderTextColor={theme.textFaint}
               style={[styles.searchInput, { color: theme.text }]}
+              accessibilityLabel="Search bank, number, holder"
             />
           </View>
-          <Pressable onPress={actions.openFilterSheet} style={[styles.filterBtn, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Pressable
+            onPress={actions.openFilterSheet}
+            style={[styles.filterBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+            accessibilityRole="button"
+            accessibilityLabel={filtersActive ? 'Filter and sort, filters active' : 'Filter and sort'}
+          >
             <IconFilter color={theme.text} />
             {filtersActive && <View style={styles.filterDotWrap}>
               <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.filterDot} />

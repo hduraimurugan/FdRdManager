@@ -15,6 +15,7 @@ A React Native app for tracking Fixed Deposit (FD) and Recurring Deposit (RD) in
 - [Windows: known Android build issue](#windows-known-android-build-issue)
 - [Metro connection issues on a physical device](#metro-connection-issues-on-a-physical-device)
 - [Everyday scripts](#everyday-scripts)
+- [Release signing](#release-signing)
 - [Data & persistence](#data--persistence)
 - [Maturity reminders](#maturity-reminders)
 - [Known limitations](#known-limitations)
@@ -174,6 +175,30 @@ Remove-Item -Recurse -Force android\app\.cxx, android\app\build, android\.gradle
 
 This is a one-time environment setup per machine — not something you need to redo per build. macOS/Linux are unaffected (no 260-character path limit).
 
+### The CMake pin above only covers the app module — third-party native modules need it too
+
+The `android/app/build.gradle` pin fixes the app's own native build, but each of
+`react-native-gesture-handler`, `react-native-screens`, and `@op-engineering/op-sqlite`
+configures **its own** `externalNativeBuild` block deep in `node_modules` and has no
+idea to ask for a newer CMake. Left alone, they fall back to the buggy 3.22.1 default —
+which debug builds usually survive (their `.cxx/Debug/...` intermediate paths are just
+short enough) but **release builds do not**: the `RelWithDebInfo` configuration's longer
+intermediate path routinely crosses the 260-character limit, and you'll see the same
+`ninja: error: manifest 'build.ninja' still dirty after 100 tries` failure specifically
+on `./gradlew assembleRelease`/`bundleRelease`, even on a machine where debug builds
+have always worked fine.
+
+You cannot fix this from the root `android/build.gradle` — a `subprojects { }` block
+that tries to set `cmake.version` on these modules throws
+`AgpDslLockedException: It is too late to set version`, because AGP locks that property
+once a module's own build script has run. `scripts/patch-native-cmake-versions.js`
+patches each affected module's `build.gradle` directly instead, adding the same
+`version "3.31.6"` line right after its `cmake { path "..." }`. It runs automatically as
+this project's `postinstall` script, so a plain `npm install` keeps it applied — you
+shouldn't need to think about this at all under normal use. If you add a new native
+dependency that also uses CMake and hits this same release-build failure, add its
+`android/build.gradle` path to the `TARGETS` array in that script.
+
 ## Metro connection issues on a physical device
 
 If the app installs but shows a red **"Unable to load script"** screen, Metro either isn't running or can't reach the device:
@@ -199,6 +224,41 @@ If the app installs but shows a red **"Unable to load script"** screen, Metro ei
 | `npx tsc --noEmit` | Type-check the whole project |
 
 To force-reload the running app: **Android** — press <kbd>R</kbd> twice, or open the Dev Menu with <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>M</kbd>. **iOS** — press <kbd>R</kbd> in the Simulator.
+
+## Release signing
+
+Debug builds sign with the checked-in `debug.keystore` (its password really is `android` —
+that's the standard, public Android debug key, not a secret). **Release builds must not
+ship signed with it**: anyone can produce an APK that looks like a legitimate update.
+
+Release signing is configured in `android/app/build.gradle` to read from
+`android/keystore.properties`, which is gitignored — never commit it. Until that file
+exists, `./gradlew assembleRelease`/`bundleRelease` still work (they fall back to the
+debug keystore) but the output isn't submittable to any store.
+
+To set up real release signing:
+
+1. Generate an upload keystore (do this once, and back up the resulting `.keystore` file
+   and its passwords somewhere durable — losing them is effectively permanent for a
+   direct-APK or F-Droid release; Play users can recover via Play App Signing's key-reset
+   process, see below):
+   ```sh
+   keytool -genkeypair -v -storetype PKCS12 \
+     -keystore fdrdmanager-upload.keystore \
+     -alias upload -keyalg RSA -keysize 2048 -validity 10000
+   ```
+2. Copy `android/keystore.properties.example` to `android/keystore.properties` and fill
+   in the real `storeFile` (an absolute path — keep the keystore itself **outside** the
+   repo entirely, not just gitignored inside it) and the passwords/alias you set above.
+3. Build: `cd android && ./gradlew bundleRelease` (AAB, for Play) or `assembleRelease`
+   (APK, for direct distribution/F-Droid).
+
+**For Google Play specifically**, enroll in
+[Play App Signing](https://support.google.com/googleplay/android-developer/answer/9842756):
+you upload signed with the *upload* key above, Google re-signs with an *app signing* key
+it holds for you, and if you ever lose the upload key, Google's documented reset process
+recovers it — the upload key alone is not a single point of permanent failure the way it
+is for F-Droid (which verifies your own signature directly) or a self-distributed APK.
 
 ## Data & persistence
 

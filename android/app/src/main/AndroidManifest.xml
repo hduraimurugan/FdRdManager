@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- No INTERNET permission: the app makes no network calls at runtime (verified —
+         see android/app/src/debug/AndroidManifest.xml for the debug-only exception
+         needed to reach the Metro dev server, which is never merged into release). -->
+
     <!-- Runtime-requested on Android 13+ (API 33+) before the first local maturity
          reminder is scheduled — see src/data/notifeeClient.ts's requestNotificationPermission.
          Declaring it here only makes the runtime prompt possible; it does not grant it. -->

@@ -5,10 +5,10 @@ import { useTheme } from '../theme/ThemeContext';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { IconPlus } from './icons/Icons';
 
-export default function Fab({ onPress, bottom = 88 }: { onPress: () => void; bottom?: number }) {
+export default function Fab({ onPress, bottom = 88, accessibilityLabel }: { onPress: () => void; bottom?: number; accessibilityLabel: string }) {
   const theme = useTheme();
   return (
-    <Pressable onPress={onPress} style={[styles.wrap, { bottom }]}>
+    <Pressable onPress={onPress} style={[styles.wrap, { bottom }]} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
       <LinearGradient
         colors={theme.gradientAccent.colors}
         start={GRADIENT_ANGLE.start}

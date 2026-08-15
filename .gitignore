@@ -35,6 +35,10 @@ local.properties
 !debug.keystore
 .kotlin/
 
+# Release signing credentials — never commit the real upload keystore or its passwords.
+# See the "Release signing" section of the README for how to set this up locally.
+keystore.properties
+
 # node.js
 #
 node_modules/

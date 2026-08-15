@@ -19,3 +19,12 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// Third-party native modules that use CMake (e.g. @op-engineering/op-sqlite) but don't
+// pin a long-path-aware CMake version get patched onto one via a postinstall script
+// (see package.json's "postinstall" and scripts/patch-native-cmake-versions.js) rather
+// than here: AGP locks externalNativeBuild.cmake.version against being set from outside
+// a module's own build.gradle (AgpDslLockedException: "It is too late to set version"),
+// so a root-project override — the first thing tried — isn't possible. See that
+// script's header comment and the README's "Windows: known Android build issue"
+// section for the full explanation.
