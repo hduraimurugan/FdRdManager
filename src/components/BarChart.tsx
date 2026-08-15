@@ -8,16 +8,18 @@ import { GRADIENT_ANGLE } from '../theme/colors';
 export default function BarChart({ bars, height = 100 }: { bars: { label: string; heightPct: number }[]; height?: number }) {
   const theme = useTheme();
   return (
-    <View style={[styles.row, { height }]}>
+    <View style={styles.row}>
       {bars.map((b, i) => (
         <View key={i} style={styles.col}>
-          <LinearGradient
-            colors={theme.gradientAccent.colors}
-            locations={theme.gradientAccent.locations}
-            start={GRADIENT_ANGLE.start}
-            end={GRADIENT_ANGLE.end}
-            style={[styles.bar, { height: `${Math.max(4, b.heightPct)}%` }]}
-          />
+          <View style={[styles.track, { height }]}>
+            <LinearGradient
+              colors={theme.gradientAccent.colors}
+              locations={theme.gradientAccent.locations}
+              start={GRADIENT_ANGLE.start}
+              end={GRADIENT_ANGLE.end}
+              style={[styles.bar, { height: `${Math.max(4, b.heightPct)}%` }]}
+            />
+          </View>
           <Text style={[styles.label, { color: theme.textFaint }]}>{b.label}</Text>
         </View>
       ))}
@@ -35,7 +37,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     gap: 6,
-    height: '100%',
+  },
+  track: {
+    width: '100%',
+    alignItems: 'center',
     justifyContent: 'flex-end',
   },
   bar: {

@@ -4,10 +4,10 @@ import Card from './Card';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 
-export default function StatPill({ value, label, minWidth = 108 }: { value: string | number; label: string; minWidth?: number }) {
+export default function StatPill({ value, label }: { value: string | number; label: string }) {
   const theme = useTheme();
   return (
-    <Card style={[styles.pill, { minWidth }]}>
+    <Card style={styles.pill}>
       <Text style={[styles.value, { color: theme.text }]}>{value}</Text>
       <Text style={[styles.label, { color: theme.textMuted }]}>{label}</Text>
     </Card>
@@ -16,7 +16,7 @@ export default function StatPill({ value, label, minWidth = 108 }: { value: stri
 
 const styles = StyleSheet.create({
   pill: {
-    flexShrink: 0,
+    width: '47.5%',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,

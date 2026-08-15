@@ -120,12 +120,12 @@ export default function HomeScreen() {
         </Card>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+      <View style={styles.pillRow}>
         <StatPill value={metrics.activeCount} label="Active deposits" />
         <StatPill value={metrics.maturedCount} label="Matured" />
-        <StatPill value={metrics.payoutsThisMonthFmt} label="Payouts this month" minWidth={118} />
-        <StatPill value={metrics.maturitiesThisMonth} label="Maturities this month" minWidth={128} />
-      </ScrollView>
+        <StatPill value={metrics.payoutsThisMonthFmt} label="Payouts this month" />
+        <StatPill value={metrics.maturitiesThisMonth} label="Maturities this month" />
+      </View>
 
       {urgent.length > 0 && (
         <View>
@@ -186,7 +186,7 @@ export default function HomeScreen() {
 
       <View>
         <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Projected interest — next 6 months</Text>
-        <Card style={styles.chartCard}>
+        <Card>
           <BarChart bars={projection} />
         </Card>
       </View>
@@ -283,6 +283,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     paddingVertical: 2,
   },
@@ -377,9 +379,6 @@ const styles = StyleSheet.create({
   typePct: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
-  },
-  chartCard: {
-    paddingBottom: 12,
   },
   timelineRow: {
     flexDirection: 'row',
