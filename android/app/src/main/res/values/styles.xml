@@ -6,4 +6,14 @@
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     </style>
 
+    <!-- Shown between process start and the first JS-driven frame (see MainActivity.kt's
+         installSplashScreen() call) — same accent color and growth-bars glyph as the
+         launcher icon. postSplashScreenTheme switches back to AppTheme automatically
+         once the splash screen is dismissed. -->
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#6F66E8</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/AppTheme</item>
+    </style>
+
 </resources>

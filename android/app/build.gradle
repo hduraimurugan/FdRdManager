@@ -153,4 +153,8 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // Native splash screen shown between process start and the first JS-driven frame —
+    // see MainActivity.kt's installSplashScreen() call and the Theme.App.Starting style.
+    implementation("androidx.core:core-splashscreen:1.2.0")
 }
