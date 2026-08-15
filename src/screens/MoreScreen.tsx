@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
@@ -7,7 +7,7 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
-import { IconBell, IconCalendar, IconClock, IconDownload, IconInfo, IconChevronRight, IconSun, IconMoon, IconWarning, IconLock } from '../components/icons/Icons';
+import { IconBell, IconCalendar, IconClock, IconDownload, IconInfo, IconChevronRight, IconSun, IconMoon, IconWarning, IconLock, IconUser } from '../components/icons/Icons';
 
 function SegButton({
   label,
@@ -53,6 +53,26 @@ export default function MoreScreen() {
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}
     >
+      <View>
+        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Profile</Text>
+        <Card style={styles.profileCard}>
+          <View style={[styles.rowIcon, { backgroundColor: 'rgba(111,102,232,0.13)' }]}>
+            <IconUser size={16} color={theme.accent} />
+          </View>
+          <View style={styles.profileFieldWrap}>
+            <Text style={[styles.profileLabel, { color: theme.textMuted }]}>Your name</Text>
+            <TextInput
+              value={state.userName}
+              onChangeText={actions.setUserName}
+              placeholder="Add your name"
+              placeholderTextColor={theme.textFaint}
+              style={[styles.profileInput, { color: theme.text }]}
+              accessibilityLabel="Your name"
+            />
+          </View>
+        </Card>
+      </View>
+
       <Card style={styles.listCard}>
         <Pressable onPress={actions.goNotifications} style={[styles.row, { borderBottomColor: theme.divider, borderBottomWidth: 1 }]}>
           <View style={[styles.rowIcon, { backgroundColor: 'rgba(226,73,90,0.12)' }]}>
@@ -134,6 +154,25 @@ const styles = StyleSheet.create({
   listCard: {
     padding: 0,
     overflow: 'hidden',
+  },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  profileFieldWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  profileLabel: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11.5,
+    marginBottom: 2,
+  },
+  profileInput: {
+    fontFamily: fontFamily.medium,
+    fontSize: 14.5,
+    padding: 0,
   },
   row: {
     flexDirection: 'row',

@@ -98,6 +98,7 @@ interface RawState {
   confirmDialog: ConfirmDialogState | null;
   toast: string | null;
   theme: 'light' | 'dark';
+  userName: string;
   editDraft: Draft | null;
   fdPayoutOpen: boolean;
   fdRenewalOpen: boolean;
@@ -224,10 +225,10 @@ async function processImportText(
   });
 }
 
-function blankFdDraft(fdRaw: StoredFd[]): Draft {
+function blankFdDraft(fdRaw: StoredFd[], userName: string): Draft {
   return {
     fdNumber: 'FD' + String(fdRaw.length + 1).padStart(3, '0'), bankName: '', branch: '', bankAccountNumber: '', customerId: '',
-    fdHolderName: '', jointHolder: '', fdType: 'Regular', mode: 'Online',
+    fdHolderName: userName, jointHolder: '', fdType: 'Regular', mode: 'Online',
     principalAmount: '', depositDate: todayIso(), startDate: todayIso(),
     tenureYears: 1, tenureMonths: 0, tenureDays: 0, interestRate: '', interestType: 'Compound', compoundingFrequency: 'Quarterly',
     interestPayoutMode: 'At Maturity', interestCreditMethod: 'Reinvested into FD',
@@ -236,10 +237,10 @@ function blankFdDraft(fdRaw: StoredFd[]): Draft {
   };
 }
 
-function blankRdDraft(rdRaw: StoredRd[]): Draft {
+function blankRdDraft(rdRaw: StoredRd[], userName: string): Draft {
   return {
     rdNumber: 'RD' + String(rdRaw.length + 1).padStart(3, '0'), bankName: '', branch: '', bankAccountNumber: '', customerId: '',
-    rdHolderName: '', jointHolder: '', rdType: 'Regular', mode: 'Online',
+    rdHolderName: userName, jointHolder: '', rdType: 'Regular', mode: 'Online',
     monthlyInstallment: '', startDate: todayIso(), tenureYears: 1, tenureMonths: 0,
     interestRate: '', interestType: 'Compound', compoundingFrequency: 'Quarterly',
     installmentsPaid: 0, remarks: '', renewalCount: 0, status: 'Active',
@@ -265,6 +266,7 @@ const initialState: RawState = {
   confirmDialog: null,
   toast: null,
   theme: 'light',
+  userName: '',
   editDraft: null,
   fdPayoutOpen: false,
   fdRenewalOpen: false,
@@ -288,6 +290,7 @@ type Action =
       fdRaw: StoredFd[];
       rdRaw: StoredRd[];
       theme: 'light' | 'dark' | null;
+      userName: string;
       remindersEnabled: boolean;
       reminderLeadDays: number;
       notificationPermissionGranted: boolean;
@@ -304,6 +307,7 @@ type Action =
   | { type: 'OPEN_FILTER_SHEET' }
   | { type: 'CLOSE_FILTER_SHEET' }
   | { type: 'SET_THEME'; theme: 'light' | 'dark' }
+  | { type: 'SET_USER_NAME'; name: string }
   | { type: 'SHOW_TOAST'; message: string }
   | { type: 'CLEAR_TOAST' }
   | { type: 'SET_EDIT_DRAFT'; draft: Draft | null }
@@ -339,6 +343,7 @@ function reducer(state: RawState, action: Action): RawState {
         fdRaw: action.fdRaw,
         rdRaw: action.rdRaw,
         theme: action.theme === 'dark' ? 'dark' : 'light',
+        userName: action.userName,
         remindersEnabled: action.remindersEnabled,
         reminderLeadDays: action.reminderLeadDays,
         notificationPermissionGranted: action.notificationPermissionGranted,
@@ -369,6 +374,8 @@ function reducer(state: RawState, action: Action): RawState {
       return { ...state, filterSheetOpen: false };
     case 'SET_THEME':
       return { ...state, theme: action.theme };
+    case 'SET_USER_NAME':
+      return { ...state, userName: action.name };
     case 'SHOW_TOAST':
       return { ...state, toast: action.message };
     case 'CLEAR_TOAST':
@@ -525,6 +532,7 @@ export interface AppActions {
   closeFilterSheet: () => void;
   setThemeLight: () => void;
   setThemeDark: () => void;
+  setUserName: (name: string) => void;
   showToast: (message: string) => void;
   goMaturityTimeline: () => void;
   goNotifications: () => void;
@@ -572,6 +580,7 @@ const StateContext = createContext<RawState>(initialState);
 const ActionsContext = createContext<AppActions | null>(null);
 
 const THEME_KEY = 'theme';
+const USER_NAME_KEY = 'userName';
 const REMINDERS_ENABLED_KEY = 'remindersEnabled';
 const REMINDER_LEAD_DAYS_KEY = 'reminderLeadDays';
 
@@ -587,9 +596,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const load = useCallback(async () => {
     try {
       await openDb();
-      const [{ fds, rds }, themeSetting, remindersEnabledRaw, leadDaysRaw, notificationPermissionGranted] = await Promise.all([
+      const [{ fds, rds }, themeSetting, userNameSetting, remindersEnabledRaw, leadDaysRaw, notificationPermissionGranted] = await Promise.all([
         loadAll(),
         getSetting(THEME_KEY),
+        getSetting(USER_NAME_KEY),
         getSetting(REMINDERS_ENABLED_KEY),
         getSetting(REMINDER_LEAD_DAYS_KEY),
         hasNotificationPermission(),
@@ -599,6 +609,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         fdRaw: fds,
         rdRaw: rds,
         theme: themeSetting === 'dark' ? 'dark' : 'light',
+        userName: userNameSetting ?? '',
         remindersEnabled: remindersEnabledRaw === 'true',
         reminderLeadDays: Number(leadDaysRaw) || DEFAULT_LEAD_DAYS,
         notificationPermissionGranted,
@@ -637,6 +648,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setThemeDark: () => {
       dispatch({ type: 'SET_THEME', theme: 'dark' });
       setSetting(THEME_KEY, 'dark').catch(() => {});
+    },
+    setUserName: name => {
+      dispatch({ type: 'SET_USER_NAME', name });
+      setSetting(USER_NAME_KEY, name).catch(() => {});
     },
     showToast,
     goMaturityTimeline: () => navigate('MaturityTimeline'),
@@ -724,11 +739,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     openFDDetail: id => navigate('FdDetail', { id }),
     openRDDetail: id => navigate('RdDetail', { id }),
     openAddFD: () => {
-      dispatch({ type: 'SET_EDIT_DRAFT', draft: blankFdDraft(stateRef.current.fdRaw) });
+      dispatch({ type: 'SET_EDIT_DRAFT', draft: blankFdDraft(stateRef.current.fdRaw, stateRef.current.userName) });
       navigate('AddEditFD', { id: null });
     },
     openAddRD: () => {
-      dispatch({ type: 'SET_EDIT_DRAFT', draft: blankRdDraft(stateRef.current.rdRaw) });
+      dispatch({ type: 'SET_EDIT_DRAFT', draft: blankRdDraft(stateRef.current.rdRaw, stateRef.current.userName) });
       navigate('AddEditRD', { id: null });
     },
     openEditFD: id => {
