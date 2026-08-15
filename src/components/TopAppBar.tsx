@@ -24,11 +24,11 @@ export default function TopAppBar({
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.row, { paddingTop: insets.top + 10, backgroundColor: theme.bg }]}>
+    <View style={[styles.row, { paddingTop: insets.top + 10, backgroundColor: theme.bg, borderBottomColor: theme.divider }]}>
       {showBack ? (
         <Pressable
           onPress={onBack}
-          style={[styles.iconBtn, { backgroundColor: theme.card }]}
+          style={[styles.iconBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Back"
@@ -69,11 +69,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 10,
     minHeight: 52,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   iconBtn: {
     width: 36,
     height: 36,
     borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -96,9 +98,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   title: {
-    fontFamily: fontFamily.bold,
-    fontSize: 19,
-    letterSpacing: -0.2,
+    flexShrink: 1,
+    fontFamily: fontFamily.extrabold,
+    fontSize: 20,
+    letterSpacing: -0.3,
   },
   dot: {
     position: 'absolute',
