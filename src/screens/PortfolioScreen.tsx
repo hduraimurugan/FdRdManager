@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { decorateFD, decorateRD, filteredSorted, DecoratedFD, DecoratedRD } from '../state/selectors';
 import { GRADIENT_ANGLE } from '../theme/colors';
+import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import BankLogo from '../components/BankLogo';
 import StatusBadge from '../components/StatusBadge';
@@ -21,6 +22,7 @@ export default function PortfolioScreen() {
   const theme = useTheme();
   const state = useAppState();
   const actions = useAppActions();
+  const { refreshing, onRefresh } = useRefresh();
 
   const kind = state.portfolioTab;
   const rawList = kind === 'FD' ? state.fdList : state.rdList;
@@ -118,6 +120,7 @@ export default function PortfolioScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={items.length === 0 ? styles.emptyListPad : styles.listPad}
           showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}
           ListEmptyComponent={
             hasAnyRecords ? (
               <EmptyState onAction={actions.resetFilters} compact />

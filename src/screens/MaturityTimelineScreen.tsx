@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { timelineMonths } from '../state/selectors';
+import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
 import BankLogo from '../components/BankLogo';
@@ -14,12 +15,17 @@ export default function MaturityTimelineScreen() {
   const theme = useTheme();
   const state = useAppState();
   const actions = useAppActions();
+  const { refreshing, onRefresh } = useRefresh();
   const months = useMemo(() => timelineMonths(state, theme), [state, theme]);
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
       <TopAppBar title="Maturity Timeline" showBack onBack={actions.back} />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}
+      >
         {months.length === 0 && (
           <EmptyState
             icon={<IconCalendar size={22} color={theme.textFaint} />}

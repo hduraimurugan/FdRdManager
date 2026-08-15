@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { payoutGroups } from '../state/selectors';
+import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
 import BankLogo from '../components/BankLogo';
@@ -13,6 +14,7 @@ export default function PayoutsScreen() {
   const theme = useTheme();
   const state = useAppState();
   const actions = useAppActions();
+  const { refreshing, onRefresh } = useRefresh();
   const { overdue, sections } = useMemo(() => payoutGroups(state, theme), [state, theme]);
 
   const openRecord = (kind: 'FD' | 'RD', recordId: string) => (kind === 'FD' ? actions.openFDDetail(recordId) : actions.openRDDetail(recordId));
@@ -20,7 +22,7 @@ export default function PayoutsScreen() {
   const isEmpty = overdue.length === 0 && sections.every(sec => sec.items.length === 0);
   if (isEmpty) {
     return (
-      <ScrollView contentContainerStyle={styles.emptyContainer}>
+      <ScrollView contentContainerStyle={styles.emptyContainer} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}>
         <EmptyState
           icon={<IconClock size={30} color="#fff" />}
           title="Nothing scheduled"
@@ -34,7 +36,11 @@ export default function PayoutsScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}
+    >
       {overdue.length > 0 && (
         <View>
           <Text style={[styles.sectionLabel, { color: theme.danger }]}>Overdue</Text>

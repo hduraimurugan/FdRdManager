@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
@@ -9,6 +9,7 @@ import { decorateRD } from '../state/selectors';
 import { formatINR, formatDate } from '../data/portfolioData';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { RootStackParamList } from '../navigation/types';
+import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
 import BankLogo from '../components/BankLogo';
@@ -22,6 +23,7 @@ export default function RdDetailScreen({ route }: Props) {
   const theme = useTheme();
   const state = useAppState();
   const actions = useAppActions();
+  const { refreshing, onRefresh } = useRefresh();
   const raw = state.rdList.find(r => r.id === route.params.id);
   const rd = useMemo(() => (raw ? decorateRD(raw, theme) : null), [raw, theme]);
 
@@ -38,7 +40,11 @@ export default function RdDetailScreen({ route }: Props) {
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
       <TopAppBar title={rd.rdNumber} showBack onBack={actions.back} />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}
+      >
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
             <BankLogo bankName={rd.bankName} size={44} />

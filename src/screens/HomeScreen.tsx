@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
@@ -7,6 +7,7 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { homeMetrics, urgentNotifications, bankDistribution, typeDistribution, projectedInterest } from '../state/selectors';
 import { today } from '../data/derive';
 import { GRADIENT_ANGLE } from '../theme/colors';
+import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import BankLogo from '../components/BankLogo';
 import StatPill from '../components/StatPill';
@@ -21,6 +22,7 @@ export default function HomeScreen() {
   const theme = useTheme();
   const state = useAppState();
   const actions = useAppActions();
+  const { refreshing, onRefresh } = useRefresh();
 
   const todayLabel = useMemo(
     () => today().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
@@ -35,7 +37,7 @@ export default function HomeScreen() {
 
   if (state.loadError) {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}>
         <ErrorState title="Couldn't load your portfolio" subtitle="Something went wrong reading your saved data." onRetry={actions.retryLoad} />
       </ScrollView>
     );
@@ -43,7 +45,7 @@ export default function HomeScreen() {
 
   if (!state.hydrated) {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}>
         <SkeletonBlock height={150} />
         <SkeletonBlock height={90} />
         <SkeletonBlock height={180} />
@@ -53,7 +55,7 @@ export default function HomeScreen() {
 
   if (isEmpty) {
     return (
-      <ScrollView contentContainerStyle={styles.emptyContainer}>
+      <ScrollView contentContainerStyle={styles.emptyContainer} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}>
         <EmptyState
           title="No deposits yet"
           subtitle="Add your first FD or RD to see your portfolio here."
@@ -72,7 +74,11 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}
+    >
       <LinearGradient colors={theme.gradientHero.colors} locations={theme.gradientHero.locations} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.hero}>
         <Text style={[styles.heroLabel, { color: theme.textMuted }]}>{todayLabel}</Text>
         <Text style={[styles.heroSub, { color: theme.textMuted }]}>Current value</Text>

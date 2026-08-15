@@ -1,10 +1,11 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { GRADIENT_ANGLE } from '../theme/colors';
+import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import { IconBell, IconCalendar, IconClock, IconDownload, IconInfo, IconChevronRight, IconSun, IconMoon, IconWarning, IconLock } from '../components/icons/Icons';
 
@@ -44,9 +45,14 @@ export default function MoreScreen() {
   const theme = useTheme();
   const state = useAppState();
   const actions = useAppActions();
+  const { refreshing, onRefresh } = useRefresh();
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}
+    >
       <Card style={styles.listCard}>
         <Pressable onPress={actions.goNotifications} style={[styles.row, { borderBottomColor: theme.divider, borderBottomWidth: 1 }]}>
           <View style={[styles.rowIcon, { backgroundColor: 'rgba(226,73,90,0.12)' }]}>
