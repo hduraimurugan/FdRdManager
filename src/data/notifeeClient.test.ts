@@ -97,3 +97,21 @@ describe('cancelAllReminders', () => {
     expect(notifee.cancelTriggerNotifications).not.toHaveBeenCalled();
   });
 });
+
+describe('displayCompletionNotification', () => {
+  it('ensures its own channel exists, separate from the reminders channel', async () => {
+    const client = loadClient();
+    const notifee = mockNotifee();
+    await client.displayCompletionNotification('Backup ready', 'backup.json is ready to share');
+    expect(notifee.createChannel).toHaveBeenCalledWith(expect.objectContaining({ id: 'backup-status' }));
+  });
+
+  it('displays an immediate notification with the given title and body', async () => {
+    const client = loadClient();
+    const notifee = mockNotifee();
+    await client.displayCompletionNotification('Import complete', 'Backup restored — 3 FD(s), 1 RD(s)');
+    expect(notifee.displayNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Import complete', body: 'Backup restored — 3 FD(s), 1 RD(s)' }),
+    );
+  });
+});

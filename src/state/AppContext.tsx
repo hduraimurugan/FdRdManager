@@ -31,7 +31,13 @@ import {
 import { writeBackupFile, shareBackupFile, deleteBackupFile, pickBackupFileText } from '../data/backupIO';
 import { encryptBackupJson, decryptBackupJson, isEncryptedPayload } from '../data/backupCrypto';
 import { planReminders, DEFAULT_LEAD_DAYS } from '../data/reminders';
-import { syncScheduledReminders, cancelAllReminders, hasNotificationPermission, requestNotificationPermission } from '../data/notifeeClient';
+import {
+  syncScheduledReminders,
+  cancelAllReminders,
+  hasNotificationPermission,
+  requestNotificationPermission,
+  displayCompletionNotification,
+} from '../data/notifeeClient';
 import { useLockActions } from './LockContext';
 
 export type ActiveTab = 'home' | 'portfolio' | 'payouts' | 'calculators' | 'more';
@@ -161,6 +167,13 @@ const IMPORT_ERROR_MESSAGES: Record<Exclude<ReturnType<typeof validateBackupJson
   version: 'That backup was made by a newer version of the app — update the app to restore it',
 };
 
+/** Outcome of processImportText, for callers that need to react to it (e.g. firing a
+ * background-completion notification) without racing React's own render cycle to read
+ * the dispatches back out of state — dispatch()/useReducer don't update stateRef.current
+ * synchronously, so re-reading state immediately after awaiting this function isn't
+ * reliable. Returning the outcome directly sidesteps that. */
+type ImportTextOutcome = 'needs-passphrase' | 'wrong-passphrase' | 'invalid' | 'ready-to-confirm';
+
 /** Shared by importBackup (first attempt) and submitImportPassphrase (retry with a
  * passphrase) — detects an encrypted payload and, once past that, runs the same
  * validate → preview → confirm-dialog flow either way. Dispatches
@@ -174,7 +187,7 @@ async function processImportText(
   showToast: (message: string) => void,
   existingFds: StoredFd[],
   existingRds: StoredRd[],
-): Promise<void> {
+): Promise<ImportTextOutcome> {
   let jsonText = text;
   let parsed: unknown = null;
   try {
@@ -186,22 +199,29 @@ async function processImportText(
   if (isEncryptedPayload(parsed)) {
     if (!passphrase) {
       dispatch({ type: 'SET_PENDING_ENCRYPTED_IMPORT_TEXT', text });
-      return;
+      return 'needs-passphrase';
     }
     const decrypted = await decryptBackupJson(parsed, passphrase);
     if (decrypted == null) {
       dispatch({ type: 'SET_PASSPHRASE_ERROR', error: 'Incorrect passphrase' });
-      return;
+      return 'wrong-passphrase';
     }
     jsonText = decrypted;
+    dispatch({ type: 'SET_PENDING_ENCRYPTED_IMPORT_TEXT', text: null });
+    // Wait for the passphrase sheet's close animation (BottomSheet, 200ms) to finish
+    // before the confirm dialog below opens its own Modal — RN doesn't reliably stack
+    // two Modals on Android, so opening one while the other is still animating out
+    // leaves the new one hidden behind it, which looks like the import silently hung
+    // right after a correct passphrase was entered.
+    await new Promise<void>(resolve => setTimeout(resolve, 250));
+  } else {
+    dispatch({ type: 'SET_PENDING_ENCRYPTED_IMPORT_TEXT', text: null });
   }
-
-  dispatch({ type: 'SET_PENDING_ENCRYPTED_IMPORT_TEXT', text: null });
 
   const result = validateBackupJson(jsonText);
   if (!result.ok) {
     showToast(IMPORT_ERROR_MESSAGES[result.reason]);
-    return;
+    return 'invalid';
   }
 
   dispatch({ type: 'SET_PENDING_IMPORT', data: { fds: result.fds, rds: result.rds, settings: result.settings } });
@@ -223,6 +243,7 @@ async function processImportText(
       secondaryLabel: preview.overwriteCount > 0 ? 'Skip existing' : undefined,
     },
   });
+  return 'ready-to-confirm';
 }
 
 function blankFdDraft(fdRaw: StoredFd[], userName: string): Draft {
@@ -629,6 +650,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toastTimer.current = setTimeout(() => dispatch({ type: 'CLEAR_TOAST' }), 2600);
   }, []);
 
+  /** Best-effort system notification for export/import completion — only fires when the
+   * user isn't actively looking at the app (the toast already covers the foreground
+   * case) and only if notification permission was already granted elsewhere (Reminders
+   * settings); this never prompts for permission itself. */
+  const notifyIfBackgrounded = useCallback((title: string, body: string) => {
+    if (RNAppState.currentState === 'active') return;
+    if (!stateRef.current.notificationPermissionGranted) return;
+    displayCompletionNotification(title, body).catch(() => {});
+  }, []);
+
   const actions = useMemo<AppActions>(() => ({
     setTab: tab => dispatch({ type: 'SET_TAB', tab }),
     setPortfolioTabFD: () => dispatch({ type: 'SET_PORTFOLIO_TAB', tab: 'FD' }),
@@ -678,23 +709,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     exportBackup: async passphrase => {
       dispatch({ type: 'SET_EXPORTING', value: true });
-      let path: string | null = null;
+      let path: string;
+      let filename: string;
       try {
         const settings = await getAllSettings();
         const envelope = buildBackupEnvelope(stateRef.current.fdRaw, stateRef.current.rdRaw, settings);
         const json = serializeBackup(envelope);
         const content = passphrase ? JSON.stringify(await encryptBackupJson(json, passphrase)) : json;
-        const filename = backupFilename();
+        filename = backupFilename();
         path = await writeBackupFile(content, filename);
-        await shareBackupFile(path, filename);
       } catch {
         showToast('Export failed — try again');
-      } finally {
-        // The file briefly held the whole portfolio (plaintext or encrypted) in the
-        // cache directory — clean it up now that the share sheet is done with it.
-        if (path) deleteBackupFile(path).catch(() => {});
         dispatch({ type: 'SET_EXPORTING', value: false });
+        return;
       }
+      // The file itself is ready at this point — the button shouldn't stay disabled
+      // through the share sheet too, since Share.open() doesn't resolve until the user
+      // finishes picking a target app (or that app finishes an upload), which can take
+      // far longer than the export work itself.
+      dispatch({ type: 'SET_EXPORTING', value: false });
+      showToast('Backup ready to share');
+      notifyIfBackgrounded('Backup ready', `${filename} is ready to share`);
+      // The file briefly holds the whole portfolio (plaintext or encrypted) in the cache
+      // directory — clean it up once the share sheet is done with it, fire-and-forget so
+      // this doesn't hold up the UI either.
+      shareBackupFile(path, filename).finally(() => deleteBackupFile(path).catch(() => {}));
     },
     importBackup: async () => {
       dispatch({ type: 'SET_IMPORTING', value: true });
@@ -713,7 +752,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!text) return;
       dispatch({ type: 'SET_IMPORTING', value: true });
       try {
-        await processImportText(text, passphrase, dispatch, showToast, stateRef.current.fdRaw, stateRef.current.rdRaw);
+        const outcome = await processImportText(text, passphrase, dispatch, showToast, stateRef.current.fdRaw, stateRef.current.rdRaw);
+        // processImportText's decrypt step is the same PBKDF2-heavy work as export —
+        // worth a ping if the user switched away while it ran.
+        if (outcome === 'ready-to-confirm') {
+          notifyIfBackgrounded('Backup decrypted', 'Open the app to review and confirm the restore');
+        } else if (outcome === 'wrong-passphrase') {
+          notifyIfBackgrounded('Incorrect passphrase', 'Open the app to try again');
+        }
       } catch {
         showToast('Could not read that file');
       } finally {
@@ -820,9 +866,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           dispatch({ type: 'SET_IMPORTING', value: true });
           applyPendingImport(pending, 'overwrite', stateRef.current.fdRaw, stateRef.current.rdRaw)
             .then(({ fdCount, rdCount }) =>
-              load().then(() => showToast(fdCount + rdCount > 0 ? `Backup restored — ${fdCount} FD(s), ${rdCount} RD(s)` : 'Nothing to restore')),
+              load().then(() => {
+                const message = fdCount + rdCount > 0 ? `Backup restored — ${fdCount} FD(s), ${rdCount} RD(s)` : 'Nothing to restore';
+                showToast(message);
+                notifyIfBackgrounded('Import complete', message);
+              }),
             )
-            .catch(() => showToast('Import failed — your existing data was not changed'))
+            .catch(() => {
+              const message = 'Import failed — your existing data was not changed';
+              showToast(message);
+              notifyIfBackgrounded('Import failed', message);
+            })
             .finally(() => dispatch({ type: 'SET_IMPORTING', value: false }));
         }
       }
@@ -855,16 +909,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_IMPORTING', value: true });
       applyPendingImport(pending, 'skip-existing', stateRef.current.fdRaw, stateRef.current.rdRaw)
         .then(({ fdCount, rdCount }) =>
-          load().then(() => showToast(fdCount + rdCount > 0 ? `Backup restored — ${fdCount} FD(s), ${rdCount} RD(s)` : 'Nothing new to restore')),
+          load().then(() => {
+            const message = fdCount + rdCount > 0 ? `Backup restored — ${fdCount} FD(s), ${rdCount} RD(s)` : 'Nothing new to restore';
+            showToast(message);
+            notifyIfBackgrounded('Import complete', message);
+          }),
         )
-        .catch(() => showToast('Import failed — your existing data was not changed'))
+        .catch(() => {
+          const message = 'Import failed — your existing data was not changed';
+          showToast(message);
+          notifyIfBackgrounded('Import failed', message);
+        })
         .finally(() => dispatch({ type: 'SET_IMPORTING', value: false }));
     },
     fcSet: field => value => dispatch({ type: 'SET_FD_CALC_FIELD', field, value }),
     rcSet: field => value => dispatch({ type: 'SET_RD_CALC_FIELD', field, value }),
     back: () => goBack(),
     retryLoad: () => load(),
-  }), [showToast, load, lockActions]);
+  }), [showToast, notifyIfBackgrounded, load, lockActions]);
 
   return (
     <StateContext.Provider value={state}>

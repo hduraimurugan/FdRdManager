@@ -14,13 +14,21 @@ import { parseIsoDate } from './finance';
 
 const CHANNEL_ID = 'maturity-reminders';
 const REMINDER_HOUR = 9; // fires at 9:00 AM local time on the planned day
+const BACKUP_STATUS_CHANNEL_ID = 'backup-status';
 
 let channelReady = false;
+let backupStatusChannelReady = false;
 
 async function ensureChannel(): Promise<void> {
   if (channelReady) return;
   await notifee.createChannel({ id: CHANNEL_ID, name: 'Maturity reminders', importance: AndroidImportance.DEFAULT });
   channelReady = true;
+}
+
+async function ensureBackupStatusChannel(): Promise<void> {
+  if (backupStatusChannelReady) return;
+  await notifee.createChannel({ id: BACKUP_STATUS_CHANNEL_ID, name: 'Backup & restore', importance: AndroidImportance.DEFAULT });
+  backupStatusChannelReady = true;
 }
 
 export async function hasNotificationPermission(): Promise<boolean> {
@@ -88,4 +96,18 @@ export async function cancelAllReminders(): Promise<void> {
   const existingIds = await notifee.getTriggerNotificationIds();
   const ourIds = existingIds.filter(id => id.startsWith(REMINDER_ID_PREFIX));
   if (ourIds.length > 0) await notifee.cancelTriggerNotifications(ourIds);
+}
+
+/** Fires an immediate, non-scheduled notification — used to tell the user a backup
+ * export/import finished while they weren't looking at the app. Unlike
+ * syncScheduledReminders this is a one-shot `displayNotification`, not a trigger; the
+ * caller decides whether firing one is appropriate (e.g. only when backgrounded and
+ * permission is already granted — see AppContext's notifyIfBackgrounded). */
+export async function displayCompletionNotification(title: string, body: string): Promise<void> {
+  await ensureBackupStatusChannel();
+  await notifee.displayNotification({
+    title,
+    body,
+    android: { channelId: BACKUP_STATUS_CHANNEL_ID, pressAction: { id: 'default' }, autoCancel: true },
+  });
 }
