@@ -12,12 +12,21 @@ export default function ConfirmDialog() {
   const actions = useAppActions();
   const visible = !!confirmDialog;
   const hasSecondary = !!confirmDialog?.secondaryLabel;
+  // Different confirm actions render different button layouts (2-button row vs 3-button
+  // stack) in this same JSX position. Without a key, React reconciles the outgoing and
+  // incoming button lists by index instead of remounting fresh — since ConfirmDialog
+  // stays mounted (only its Modal's `visible` toggles) across every action in the app,
+  // that can leave a stale/half-patched native view behind (e.g. a Pressable that never
+  // gets its Text child attached) when one dialog shape is swapped for another. Keying by
+  // the dialog's own identity forces a clean remount every time a new confirm request
+  // comes in, regardless of whether its shape happens to match the previous one.
+  const dialogKey = `${confirmDialog?.action ?? 'none'}-${confirmDialog?.id ?? ''}`;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={actions.closeConfirm}>
       <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={actions.closeConfirm} />
-        <View style={[styles.dialog, { backgroundColor: theme.sheet, borderColor: theme.borderStrong }]}>
+        <View key={dialogKey} style={[styles.dialog, { backgroundColor: theme.sheet, borderColor: theme.borderStrong }]}>
           <Text style={[styles.title, { color: theme.text }]}>{confirmDialog?.title}</Text>
           <Text style={[styles.message, { color: theme.textMuted }]}>{confirmDialog?.message}</Text>
           {hasSecondary ? (

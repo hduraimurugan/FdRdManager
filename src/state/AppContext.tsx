@@ -167,6 +167,18 @@ const IMPORT_ERROR_MESSAGES: Record<Exclude<ReturnType<typeof validateBackupJson
   version: 'That backup was made by a newer version of the app — update the app to restore it',
 };
 
+/** PBKDF2 (via @noble/hashes, used by encryptBackupJson/decryptBackupJson) only yields
+ * to the microtask queue internally, never to a real timer — so it never returns control
+ * to React/the native bridge until the whole ~300k-round derivation finishes. Awaiting a
+ * setTimeout forces one real macrotask boundary, giving React a chance to actually paint
+ * a pending state update (e.g. an "importing"/"exporting" flag just dispatched) before
+ * that stall begins — without this, the UI can go dark with zero visible change for the
+ * whole duration, which looks indistinguishable from a hang. Call right after dispatching
+ * the "in progress" flag and before starting the crypto work. */
+function yieldToUI(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 /** Outcome of processImportText, for callers that need to react to it (e.g. firing a
  * background-completion notification) without racing React's own render cycle to read
  * the dispatches back out of state — dispatch()/useReducer don't update stateRef.current
@@ -709,6 +721,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     exportBackup: async passphrase => {
       dispatch({ type: 'SET_EXPORTING', value: true });
+      await yieldToUI();
       let path: string;
       let filename: string;
       try {
@@ -751,6 +764,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const text = stateRef.current.pendingEncryptedImportText;
       if (!text) return;
       dispatch({ type: 'SET_IMPORTING', value: true });
+      await yieldToUI();
       try {
         const outcome = await processImportText(text, passphrase, dispatch, showToast, stateRef.current.fdRaw, stateRef.current.rdRaw);
         // processImportText's decrypt step is the same PBKDF2-heavy work as export —
