@@ -36,7 +36,7 @@ export default function FdDetailScreen({ route }: Props) {
     );
   }
 
-  const canRenew = fd.status === 'Active';
+  const canRenew = fd.status === 'Active' || fd.status === 'Matured';
   const canClose = fd.status === 'Active';
 
   return (

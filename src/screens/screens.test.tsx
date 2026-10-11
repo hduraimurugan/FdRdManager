@@ -209,5 +209,17 @@ describe('UI user interactions', () => {
   it('BUG-007 matured FD offers renewal for its pending renewal decision', async () => {
     mockState.fdList = [deriveFd(fd({ startDate: '2025-01-01' }), NOW)];
     const tree = await screen('FdDetailScreen'); expect(hasText(tree, 'Renew')).toBe(true);
+    await press(tree, 'Renew');
+    expect(mockActions.askConfirm).toHaveBeenCalledWith('renew', 'FD', 'fd-1', 'Renew this FD?', expect.any(String), 'Renew');
+  });
+  it('BUG-007 active FD retains its renewal action', async () => {
+    const tree = await screen('FdDetailScreen');
+    await press(tree, 'Renew');
+    expect(mockActions.askConfirm).toHaveBeenCalledWith('renew', 'FD', 'fd-1', 'Renew this FD?', expect.any(String), 'Renew');
+  });
+  it.each(['Closed', 'Prematurely Closed'])('BUG-007 %s FD has no renewal action', async status => {
+    mockState.fdList = [deriveFd(fd({ startDate: '2025-01-01', status }), NOW)];
+    const tree = await screen('FdDetailScreen');
+    expect(hasText(tree, 'Renew')).toBe(false);
   });
 });

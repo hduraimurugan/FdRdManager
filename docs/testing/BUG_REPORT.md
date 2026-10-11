@@ -1,6 +1,6 @@
 # Bug Report
 
-Snapshot: 2026-10-11. Status: **BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
+Snapshot: 2026-10-11. Status: **BUG-007 and BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
 
 Severity: High = data reliability/security/business outcome; Medium = incorrect validation, schedule or blocked workflow. These are review priorities, not proof of exploitation.
 
@@ -14,7 +14,7 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 | BUG-004 | High | Failed save leaves an unpersisted deposit visible | Confirmed; failing regression; fix deferred |
 | BUG-005 | High | Inactive-to-background transition restarts lock grace timer | Confirmed; failing regression; fix deferred |
 | BUG-006 | High | FD renewal starts today instead of the promised maturity date | Confirmed; failing regression; fix deferred |
-| BUG-007 | Medium | Matured FD has no renewal action | Confirmed; failing regression; fix deferred |
+| BUG-007 | Medium | Matured FD has no renewal action | Fixed; regression passing |
 | BUG-008 | Medium | Overflowing amount passes form validation | Fixed; regression passing |
 
 ## BUG-001: Future RD incorrectly has an installment due
@@ -79,12 +79,14 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 
 ## BUG-007: Matured FD has no renewal action
 
-- Severity: **Medium**. Status: open, fix deferred.
-- Source: [src/screens/FdDetailScreen.tsx](../../src/screens/FdDetailScreen.tsx), line 39 (`const canRenew = fd.status === 'Active'`).
+- Severity: **Medium**. Status: fixed on 2026-10-11.
+- Source: [src/screens/FdDetailScreen.tsx](../../src/screens/FdDetailScreen.tsx), line 39 (`const canRenew`).
 - Executable regression: [src/screens/screens.test.tsx](../../src/screens/screens.test.tsx); filter with `npm test -- --runInBand --testNamePattern=BUG-007`.
 - Preconditions and steps: Render FD detail on 15 June 2026 for a one-year FD starting 1 January 2025.
 - Expected: A renewal action is available for the matured deposit with a pending renewal decision.
-- Actual/evidence: Renew button is absent because only Active FDs can renew.
+- Original actual/evidence: Renew button was absent because only Active FDs could renew.
+- Fix: The Renew action is available for Active and Matured FDs and opens the existing renewal confirmation for the selected record. Closed and Prematurely Closed FDs remain ineligible.
+- Verification: All 74 screen tests pass, including matured/active renewal confirmation and closed-status exclusion regressions. Targeted ESLint reports 0 errors and 4 existing warnings. The separate renewal start-date defect (BUG-006) remains deferred.
 - Reproduction layer: Jest unit/provider/renderer test; native device reproduction pending.
 
 ## BUG-008: Overflowing amount passes form validation
@@ -115,5 +117,5 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 - Reminders may not fire after reboot unless the app is reopened to resynchronize.
 - The SQLite database is not encrypted at rest; app lock protects the UI.
 
-BUG-008 application validation is fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
+BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
 
