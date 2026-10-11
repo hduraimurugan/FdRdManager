@@ -7,7 +7,7 @@ import { useAppActions, useAppState } from '../state/AppContext';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
-import { IconBell, IconCalendar, IconClock, IconDownload, IconInfo, IconChevronRight, IconSun, IconMoon, IconWarning, IconLock, IconUser } from '../components/icons/Icons';
+import { IconBell, IconCalendar, IconClock, IconDownload, IconInfo, IconChevronRight, IconSun, IconMoon, IconLock, IconUser } from '../components/icons/Icons';
 
 function SegButton({
   label,
@@ -125,19 +125,6 @@ export default function MoreScreen() {
           <SegButton label="Light" active={state.theme === 'light'} onPress={actions.setThemeLight} icon={<IconSun color={state.theme === 'light' ? '#fff' : theme.textMuted} />} />
           <SegButton label="Dark" active={state.theme === 'dark'} onPress={actions.setThemeDark} icon={<IconMoon color={state.theme === 'dark' ? '#fff' : theme.textMuted} />} />
         </View>
-      </View>
-
-      <View>
-        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Data</Text>
-        <Card style={styles.listCard}>
-          <Pressable onPress={actions.goClearData} style={styles.row}>
-            <View style={[styles.rowIcon, { backgroundColor: 'rgba(226,73,90,0.12)' }]}>
-              <IconWarning size={17} color={theme.danger} />
-            </View>
-            <Text style={[styles.rowLabel, { color: theme.danger }]}>Delete all data</Text>
-            <IconChevronRight size={15} color={theme.textFaint} />
-          </Pressable>
-        </Card>
       </View>
 
       <Text style={[styles.footer, { color: theme.textFaint }]}>FD/RD Portfolio Manager · v1.0</Text>

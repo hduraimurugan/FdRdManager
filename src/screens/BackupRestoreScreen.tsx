@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
@@ -8,7 +8,7 @@ import { GRADIENT_ANGLE } from '../theme/colors';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
 import BottomSheet from '../components/BottomSheet';
-import { IconDownload, IconImport, IconLock } from '../components/icons/Icons';
+import { IconChevronRight, IconDownload, IconImport, IconLock, IconWarning } from '../components/icons/Icons';
 
 const MIN_PASSPHRASE_LENGTH = 6;
 
@@ -57,7 +57,7 @@ export default function BackupRestoreScreen() {
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
       <TopAppBar titleIcon={<IconImport size={18} color={theme.accent} />} title="Backup & Restore" showBack onBack={actions.back} />
-      <View style={styles.container}>
+      <ScrollView style={styles.flex} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Card style={styles.card}>
           <View style={[styles.rowIcon, { backgroundColor: 'rgba(91,158,224,0.15)' }]}>
             <IconDownload size={18} color="#5b9ee0" />
@@ -108,7 +108,25 @@ export default function BackupRestoreScreen() {
             <Text style={[styles.outlineBtnText, { color: theme.text }]}>{state.importing ? 'Importing…' : 'Choose backup file'}</Text>
           </Pressable>
         </Card>
-      </View>
+
+        <View style={styles.dangerSection}>
+          <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Danger zone</Text>
+          <Card style={[styles.dangerCard, { borderColor: theme.tint(theme.danger, 0.25) }]}>
+            <Text style={[styles.dangerHint, { color: theme.textMuted }]}>Permanently remove all deposits and saved settings from this device.</Text>
+            <Pressable
+              onPress={actions.goClearData}
+              accessibilityRole="button"
+              style={styles.dangerRow}
+            >
+              <View style={[styles.rowIcon, { backgroundColor: theme.tint(theme.danger, 0.12) }]}>
+                <IconWarning size={17} color={theme.danger} />
+              </View>
+              <Text style={[styles.dangerLabel, { color: theme.danger }]}>Delete all data</Text>
+              <IconChevronRight size={15} color={theme.textFaint} />
+            </Pressable>
+          </Card>
+        </View>
+      </ScrollView>
 
       <BottomSheet visible={exportSheetOpen} onClose={() => setExportSheetOpen(false)}>
         <Text style={[styles.sheetTitle, { color: theme.text }]}>Set a passphrase</Text>
@@ -173,8 +191,15 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: {
     padding: 16,
+    paddingBottom: 32,
     gap: 16,
   },
+  dangerSection: { gap: 8, marginTop: 4 },
+  sectionLabel: { fontFamily: fontFamily.semibold, fontSize: 12, letterSpacing: 0.5, textTransform: 'uppercase' },
+  dangerCard: { gap: 10 },
+  dangerHint: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17 },
+  dangerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
+  dangerLabel: { flex: 1, fontFamily: fontFamily.semibold, fontSize: 14 },
   card: {
     gap: 10,
   },
