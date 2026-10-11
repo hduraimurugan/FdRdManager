@@ -153,11 +153,7 @@ export default function PortfolioScreen() {
               { backgroundColor: theme.card, borderColor: theme.borderStrong },
             ]}
             accessibilityRole="button"
-            accessibilityLabel={
-              filters.length
-                ? `Filter and sort, ${filters.length} filters active`
-                : 'Filter and sort'
-            }
+            accessibilityLabel={filters.length ? `Filter & sort, ${filters.length} filters active` : 'Filter & sort'}
           >
             <IconFilter size={18} color={theme.accent} />
             <Text style={[styles.filterText, { color: theme.text }]}>
@@ -351,8 +347,7 @@ export default function PortfolioScreen() {
         accessibilityLabel={`Add ${kind}`}
         style={[styles.addFab, { backgroundColor: theme.accent, shadowColor: theme.mode === 'dark' ? '#000' : theme.text }]}
       >
-        <IconPlus size={20} color={theme.mode === 'dark' ? theme.bg : '#fff'} />
-        <Text style={[styles.buttonText, { color: theme.mode === 'dark' ? theme.bg : '#fff' }]}>Add {kind}</Text>
+        <IconPlus size={24} color={theme.mode === 'dark' ? theme.bg : '#fff'} />
       </Pressable>
     </View>
   );
@@ -395,14 +390,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 20,
     bottom: 4,
-    height: 48,
-    flexDirection: 'row',
+    width: 56,
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    borderRadius: 28,
     elevation: 6,
     shadowOpacity: 0.24,
     shadowOffset: { width: 0, height: 4 },

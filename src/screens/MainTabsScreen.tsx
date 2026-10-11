@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, ScrollViewInstance, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, ScrollViewInstance, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAppActions, useAppState } from '../state/AppContext';
 import TopAppBar from '../components/TopAppBar';
@@ -31,13 +31,35 @@ const PAGES: Record<string, React.ComponentType> = {
   more: MoreScreen,
 };
 
+function PortfolioKindSwitch({ selected, fdCount, rdCount, accent, background, mutedColor, selectedTextColor, onSelect }: {
+  selected: 'FD' | 'RD'; fdCount: number; rdCount: number; accent: string;
+  background: string; mutedColor: string; selectedTextColor: string; onSelect: (kind: 'FD' | 'RD') => void;
+}) {
+  const slide = useRef(new Animated.Value(selected === 'FD' ? 0 : 1)).current;
+  useEffect(() => {
+    Animated.timing(slide, { toValue: selected === 'FD' ? 0 : 1, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [selected, slide]);
+  return (
+    <View style={[styles.portfolioSwitch, { backgroundColor: background }]}>
+      <Animated.View pointerEvents="none" style={[styles.switchPill, { backgroundColor: accent, transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [0, 58] }) }] }]} />
+      {(['FD', 'RD'] as const).map(kind => {
+        const active = selected === kind;
+        return <Pressable key={kind} accessibilityRole="tab" accessibilityLabel={kind === 'FD' ? 'Fixed Deposits' : 'Recurring Deposits'} accessibilityState={{ selected: active }} onPress={() => onSelect(kind)} style={styles.portfolioSwitchItem}>
+          <Text style={[styles.portfolioSwitchText, { color: active ? selectedTextColor : mutedColor }]}>{kind} {kind === 'FD' ? fdCount : rdCount}</Text>
+        </Pressable>;
+      })}
+    </View>
+  );
+}
+
 export default function MainTabsScreen() {
   const theme = useTheme();
   const state = useAppState();
   const actions = useAppActions();
   const { width } = useWindowDimensions();
   const scrollRef = useRef<ScrollViewInstance>(null);
-  const [pagerHeight, setPagerHeight] = useState(0);
+  const [pagerSize, setPagerSize] = useState({ width: 0, height: 0 });
+  const pageWidth = pagerSize.width || width;
 
   const TitleIcon = TITLE_ICONS[state.activeTab];
   const activeIndex = TAB_ORDER.indexOf(state.activeTab);
@@ -55,8 +77,8 @@ export default function MainTabsScreen() {
       tabChangeFromSwipe.current = false;
       return;
     }
-    scrollRef.current?.scrollTo({ x: activeIndex * width, animated: true });
-  }, [activeIndex, width]);
+    scrollRef.current?.scrollTo({ x: activeIndex * pageWidth, animated: true });
+  }, [activeIndex, pageWidth]);
 
   // Commit the tab change as soon as the finger lifts (onScrollEndDrag) rather
   // than waiting for the native snap animation to finish (onMomentumScrollEnd)
@@ -67,7 +89,7 @@ export default function MainTabsScreen() {
   // correction for the rare fast-flick case where the native fling carries
   // past the immediate next page.
   const commitFromOffset = (offsetX: number) => {
-    const index = Math.round(offsetX / width);
+    const index = Math.round(offsetX / pageWidth);
     const tab = TAB_ORDER[index];
     if (tab && tab !== state.activeTab) {
       tabChangeFromSwipe.current = true;
@@ -79,7 +101,7 @@ export default function MainTabsScreen() {
   const handleMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => commitFromOffset(e.nativeEvent.contentOffset.x);
 
   const handlePagerLayout = (e: LayoutChangeEvent) => {
-    setPagerHeight(e.nativeEvent.layout.height);
+    setPagerSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
   };
 
   return (
@@ -91,25 +113,7 @@ export default function MainTabsScreen() {
         unreadCount={state.notifications.length}
         onBellPress={actions.goNotifications}
         rightContent={state.activeTab === 'portfolio' ? (
-          <View style={[styles.portfolioSwitch, { backgroundColor: theme.inputBg }]}>
-            {(['FD', 'RD'] as const).map(kind => {
-              const selected = state.portfolioTab === kind;
-              return (
-                <Pressable
-                  key={kind}
-                  accessibilityRole="tab"
-                  accessibilityLabel={kind === 'FD' ? 'Fixed Deposits' : 'Recurring Deposits'}
-                  accessibilityState={{ selected }}
-                  onPress={kind === 'FD' ? actions.setPortfolioTabFD : actions.setPortfolioTabRD}
-                  style={[styles.portfolioSwitchItem, { backgroundColor: selected ? theme.accent : 'transparent' }]}
-                >
-                  <Text style={[styles.portfolioSwitchText, { color: selected ? (theme.mode === 'dark' ? theme.bg : '#fff') : theme.textMuted }]}>
-                    {kind} {kind === 'FD' ? state.fdList.length : state.rdList.length}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <PortfolioKindSwitch selected={state.portfolioTab} fdCount={state.fdList.length} rdCount={state.rdList.length} accent={theme.accent} background={theme.inputBg} mutedColor={theme.textMuted} selectedTextColor={theme.mode === 'dark' ? theme.bg : '#fff'} onSelect={kind => kind === 'FD' ? actions.setPortfolioTabFD() : actions.setPortfolioTabRD()} />
         ) : undefined}
       />
       <View style={styles.flex} onLayout={handlePagerLayout}>
@@ -124,7 +128,7 @@ export default function MainTabsScreen() {
           {TAB_ORDER.map(tab => {
             const Screen = PAGES[tab];
             return (
-              <View key={tab} style={{ width, height: pagerHeight || undefined }} collapsable={false}>
+              <View key={tab} style={{ width: pageWidth, height: pagerSize.height || undefined }} collapsable={false}>
                 <Screen />
               </View>
             );
@@ -132,7 +136,7 @@ export default function MainTabsScreen() {
         </ScrollView>
 
       </View>
-      <BottomTabBar activeTab={state.activeTab} onChange={actions.setTab} />
+      <BottomTabBar activeTab={state.activeTab} onChange={tab => { tabChangeFromSwipe.current = false; actions.setTab(tab); }} />
       <FilterSheet />
     </View>
   );
@@ -142,7 +146,8 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  portfolioSwitch: { flexDirection: 'row', borderRadius: 12, padding: 3, gap: 2 },
-  portfolioSwitchItem: { minWidth: 58, minHeight: 36, paddingHorizontal: 8, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  portfolioSwitch: { position: 'relative', flexDirection: 'row', borderRadius: 12, padding: 3, gap: 2 },
+  switchPill: { position: 'absolute', top: 3, left: 3, width: 58, height: 36, borderRadius: 9 },
+  portfolioSwitchItem: { zIndex: 1, minWidth: 58, minHeight: 36, paddingHorizontal: 8, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   portfolioSwitchText: { fontFamily: fontFamily.semibold, fontSize: 12 },
 });
