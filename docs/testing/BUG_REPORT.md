@@ -1,6 +1,6 @@
 # Bug Report
 
-Snapshot: 2026-10-11. Status: **BUG-004, BUG-005, BUG-006, BUG-007 and BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
+Snapshot: 2026-10-11. Status: **BUG-003, BUG-004, BUG-005, BUG-006, BUG-007 and BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
 
 Severity: High = data reliability/security/business outcome; Medium = incorrect validation, schedule or blocked workflow. These are review priorities, not proof of exploitation.
 
@@ -10,7 +10,7 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 |---|---|---|---|
 | BUG-001 | Medium | Future RD incorrectly has an installment due | Confirmed; failing regression; fix deferred |
 | BUG-002 | Medium | Month-end RD installment count lags its clamped schedule | Confirmed; failing regression; fix deferred |
-| BUG-003 | High | Portfolio values remain stale after foreground return | Confirmed; failing regression; fix deferred |
+| BUG-003 | High | Portfolio values remain stale after foreground return | Fixed; regression passing |
 | BUG-004 | High | Failed save leaves an unpersisted deposit visible | Fixed; regression passing |
 | BUG-005 | High | Inactive-to-background transition restarts lock grace timer | Fixed; regression passing |
 | BUG-006 | High | FD renewal starts today instead of the promised maturity date | Fixed; regression passing |
@@ -39,12 +39,15 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 
 ## BUG-003: Portfolio values remain stale after foreground return
 
-- Severity: **High**. Status: open, fix deferred.
-- Source: [src/state/AppContext.tsx](../../src/state/AppContext.tsx), line 982 (`export function useAppState`).
+- Severity: **High**. Status: fixed on 2026-10-11.
+- Source: [src/state/AppContext.tsx](../../src/state/AppContext.tsx), foreground listener in `AppProvider` and date-dependent memoization in `useAppState`.
 - Executable regression: [src/state/AppContext.test.tsx](../../src/state/AppContext.test.tsx); filter with `npm test -- --runInBand --testNamePattern=BUG-003`.
 - Preconditions and steps: Hydrate the synthetic FD on 15 June 2026. Advance the clock one day without changing records and emit the active AppState event.
 - Expected: Days remaining changes from 200 to 199, with derivations refreshed.
-- Actual/evidence: Days remaining remains 200. Memoization depends on raw record arrays, not the date.
+- Original actual/evidence: Days remaining remained 200. Memoization depended on raw record arrays, not the date.
+- Follow-up finding: The checkout already included the date in memoization dependencies, and the original regression passed through a successful permission refresh triggering a render. Portfolio refresh still depended on that unrelated asynchronous operation completing.
+- Fix: A dedicated foreground listener immediately notifies state consumers to re-read the local date and recompute derived lists, events and notifications, independently of notification-permission refresh. Stored records are not reloaded or written.
+- Verification: All 132 provider/screen/lock tests pass. BUG-003 coverage includes next-day FD/RD values while permission refresh is pending and maturity status/events/alerts when permission refresh fails. Targeted ESLint and TypeScript checks pass.
 - Reproduction layer: Jest unit/provider/renderer test; native device reproduction pending.
 
 ## BUG-004: Failed save leaves an unpersisted deposit visible
@@ -123,5 +126,5 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 - Reminders may not fire after reboot unless the app is reopened to resynchronize.
 - The SQLite database is not encrypted at rest; app lock protects the UI.
 
-BUG-004 save persistence, BUG-005 lock grace timing, BUG-006 renewal start date, BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
+BUG-003 foreground portfolio refresh, BUG-004 save persistence, BUG-005 lock grace timing, BUG-006 renewal start date, BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
 

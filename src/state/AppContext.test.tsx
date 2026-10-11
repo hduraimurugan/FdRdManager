@@ -197,6 +197,33 @@ describe('APP: provider orchestration', () => {
     await run(() => listeners.forEach(listener => listener('active')));
     expect(state.fdList[0].daysRemaining).toBe(before - 1);
   });
+  it('BUG-003 refreshes FD/RD values immediately while permission refresh is pending', async () => {
+    await mount();
+    const beforeFd = state.fdList[0]; const beforeRd = state.rdList[0];
+    let finishPermission!: (granted: boolean) => void;
+    jest.mocked(notifications.hasNotificationPermission).mockReturnValueOnce(new Promise(resolve => { finishPermission = resolve; }));
+    jest.setSystemTime(new Date(2026, 5, 16, 0, 1));
+    await run(() => listeners.forEach(listener => listener('active')));
+    expect(state.fdList[0].daysRemaining).toBe(beforeFd.daysRemaining - 1);
+    expect(state.rdList[0].daysRemaining).toBe(beforeRd.daysRemaining - 1);
+    expect(state.fdList[0].interestEarnedSoFar).toBeGreaterThan(beforeFd.interestEarnedSoFar);
+    expect(db.loadAll).toHaveBeenCalledTimes(1);
+    expect(db.upsertFd).not.toHaveBeenCalled(); expect(db.upsertRd).not.toHaveBeenCalled();
+    await run(() => finishPermission(true));
+  });
+  it('BUG-003 foreground return refreshes maturity status, events and alerts', async () => {
+    await mount();
+    const beforeEvents = state.events; const beforeNotifications = state.notifications;
+    jest.setSystemTime(new Date(2027, 0, 2, 0, 1));
+    jest.mocked(notifications.hasNotificationPermission).mockRejectedValueOnce(new Error('permission unavailable'));
+    await run(() => listeners.forEach(listener => listener('active')));
+    expect(state.fdList[0].status).toBe('Matured');
+    expect(state.rdList[0].status).toBe('Matured');
+    expect(state.events).not.toEqual(beforeEvents);
+    expect(state.notifications).not.toEqual(beforeNotifications);
+    expect(state.notifications.some(n => n.recordId === 'fd-1' && n.title.includes('matured'))).toBe(true);
+    expect(db.loadAll).toHaveBeenCalledTimes(1);
+  });
   it.each(['FD', 'RD'] as const)('BUG-004 failed %s add preserves the portfolio and draft for retry', async kind => {
     await mount(); const original = kind === 'FD' ? state.fdList : state.rdList;
     await run(() => kind === 'FD' ? actions.openAddFD() : actions.openAddRD());

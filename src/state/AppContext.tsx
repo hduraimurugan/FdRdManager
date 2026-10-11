@@ -366,10 +366,14 @@ type Action =
   | { type: 'SET_PASSPHRASE_ERROR'; error: string | null }
   | { type: 'SET_REMINDERS_ENABLED'; enabled: boolean }
   | { type: 'SET_REMINDER_LEAD_DAYS'; days: number }
-  | { type: 'SET_NOTIFICATION_PERMISSION'; granted: boolean };
+  | { type: 'SET_NOTIFICATION_PERMISSION'; granted: boolean }
+  | { type: 'REFRESH_DATE' };
 
 function reducer(state: RawState, action: Action): RawState {
   switch (action.type) {
+    case 'REFRESH_DATE':
+      // Notify consumers to re-read today's date even when stored records are unchanged.
+      return { ...state };
     case 'HYDRATE':
       return {
         ...state,
@@ -668,6 +672,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const sub = RNAppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') dispatch({ type: 'REFRESH_DATE' });
+    });
+    return () => sub.remove();
+  }, []);
 
   const showToast = useCallback((message: string) => {
     dispatch({ type: 'SHOW_TOAST', message });
