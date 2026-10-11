@@ -107,13 +107,53 @@ describe('UI user interactions', () => {
   });
   it.each(['AddEditFdScreen', 'AddEditRdScreen'])('UI-008 %s validates before saving and forwards draft changes', async name => {
     const isFd = name === 'AddEditFdScreen'; mockState.editDraft = {};
-    const tree = await screen(name); const save = tree.root.findAll(node => typeof node.props.onPress === 'function' && node.findAllByType(Text).some(n => textContent(n).startsWith('Save')))[0];
+    const tree = await screen(name);
+    if (isFd) await press(tree, 'Review');
+    const save = tree.root.findAll(node => typeof node.props.onPress === 'function' && node.findAllByType(Text).some(n => textContent(n).startsWith('Save')))[0];
     expect(save).toBeDefined(); await act(async () => save.props.onPress());
     expect(mockActions.showToast).toHaveBeenCalledWith('Fix the highlighted fields before saving'); expect(mockActions[isFd ? 'saveDraftFD' : 'saveDraftRD']).not.toHaveBeenCalled();
     mockState.editDraft = isFd ? fd() : rd(); await act(async () => tree.update(<ThemeProvider mode="light">{element(name)}</ThemeProvider>));
     await act(async () => tree.root.findAllByType(FormField)[0].props.onChangeText('NEW001')); expect(mockActions.setDraftField).toHaveBeenCalledWith(isFd ? 'fdNumber' : 'rdNumber', 'NEW001');
+    if (isFd) { await press(tree, 'Continue to details'); await press(tree, 'Review FD'); }
     const validSave = tree.root.findAll(node => typeof node.props.onPress === 'function' && node.findAllByType(Text).some(n => textContent(n).startsWith('Save')))[0];
     await act(async () => validSave.props.onPress()); expect(mockActions[isFd ? 'saveDraftFD' : 'saveDraftRD']).toHaveBeenCalledWith(null);
+  });
+  it('FD steps keep optional details tucked away and retain draft values when navigating', async () => {
+    const tree = await screen('AddEditFdScreen');
+    expect(hasText(tree, 'Bank account number')).toBe(false);
+    await press(tree, 'Continue to details');
+    expect(hasText(tree, 'FD holder name')).toBe(true);
+    expect(hasText(tree, 'Branch')).toBe(false);
+    await press(tree, 'Bank details');
+    const branch = tree.root.findAllByType(FormField).find(node => node.props.label === 'Branch')!;
+    await act(async () => branch.props.onChangeText('Chennai'));
+    expect(mockActions.setDraftField).toHaveBeenCalledWith('branch', 'Chennai');
+    mockState.editDraft = { ...mockState.editDraft, branch: 'Chennai' };
+    await act(async () => tree.update(<ThemeProvider mode="light">{element('AddEditFdScreen')}</ThemeProvider>));
+    await press(tree, 'Review FD');
+    expect(hasText(tree, 'Estimated maturity amount')).toBe(true);
+    expect(hasText(tree, 'Interest payout frequency')).toBe(false);
+    await press(tree, 'Interest payout');
+    expect(hasText(tree, 'Interest payout frequency')).toBe(true);
+    await press(tree, 'Renewal');
+    expect(hasText(tree, 'Renewal instruction')).toBe(true);
+    await press(tree, 'Previous');
+    expect(tree.root.findAllByType(FormField).find(node => node.props.label === 'Branch')!.props.value).toBe('Chennai');
+  });
+  it('FD continue validates essentials and save reveals an invalid date in a collapsed section', async () => {
+    mockState.editDraft = {};
+    const tree = await screen('AddEditFdScreen');
+    expect(hasText(tree, 'Select a bank')).toBe(false);
+    await press(tree, 'Continue to details');
+    expect(hasText(tree, 'Select a bank')).toBe(true);
+    expect(hasText(tree, 'Build your deposit')).toBe(true);
+    mockState.editDraft = { ...fd(), depositDate: '2026-02-01', startDate: '2026-01-01' };
+    await act(async () => tree.update(<ThemeProvider mode="light">{element('AddEditFdScreen')}</ThemeProvider>));
+    await press(tree, 'Review');
+    await press(tree, 'Save FD');
+    expect(hasText(tree, 'Make it yours')).toBe(true);
+    expect(hasText(tree, "Deposit date can't be after the start date")).toBe(true);
+    expect(mockActions.saveDraftFD).not.toHaveBeenCalled();
   });
   it.each(['FdCalculatorScreen', 'RdCalculatorScreen'])('UI-009 %s shows calculated results and forwards input changes', async name => {
     const tree = await screen(name); await act(async () => tree.root.findAllByType(FormField)[0].props.onChangeText('20000'));
