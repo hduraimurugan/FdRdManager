@@ -1,6 +1,6 @@
 # Bug Report
 
-Snapshot: 2026-10-11. Status: **open; fixes deferred**. Findings are reproduced by automated tests against unmodified application source, not by native device execution.
+Snapshot: 2026-10-11. Status: **BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
 
 Severity: High = data reliability/security/business outcome; Medium = incorrect validation, schedule or blocked workflow. These are review priorities, not proof of exploitation.
 
@@ -15,7 +15,7 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 | BUG-005 | High | Inactive-to-background transition restarts lock grace timer | Confirmed; failing regression; fix deferred |
 | BUG-006 | High | FD renewal starts today instead of the promised maturity date | Confirmed; failing regression; fix deferred |
 | BUG-007 | Medium | Matured FD has no renewal action | Confirmed; failing regression; fix deferred |
-| BUG-008 | Medium | Overflowing amount passes form validation | Confirmed; failing regression; fix deferred |
+| BUG-008 | Medium | Overflowing amount passes form validation | Fixed; regression passing |
 
 ## BUG-001: Future RD incorrectly has an installment due
 
@@ -89,12 +89,14 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 
 ## BUG-008: Overflowing amount passes form validation
 
-- Severity: **Medium**. Status: open, fix deferred.
+- Severity: **Medium**. Status: fixed on 2026-10-11.
 - Source: [src/data/validation.ts](../../src/data/validation.ts), line 32 (`const principal = toNumber`).
 - Executable regression: [src/data/validation.boundaries.test.ts](../../src/data/validation.boundaries.test.ts); filter with `npm test -- --runInBand --testNamePattern=BUG-008`.
 - Preconditions and steps: Validate an otherwise valid FD draft whose principalAmount is the numeric string 1e309.
 - Expected: Amount validation error because the parsed amount is Infinity.
-- Actual/evidence: No principal validation error. The validator checks NaN and positivity, not finiteness. The RD path has the same check, but its subsequent assertion is not reached in this failing test.
+- Original actual/evidence: No principal validation error. The validator checked NaN and positivity, not finiteness. The RD path had the same check, but its subsequent assertion was not reached in the original failing test.
+- Fix: FD principal and RD monthly installment validation now require `Number.isFinite`, returning `Enter a valid amount` for overflowing and other non-finite amounts.
+- Verification: Both validation suites pass (35 tests); targeted ESLint passes. Independent FD and RD regressions cover positive/negative overflow, Infinity strings and values, and NaN; finite positive amounts remain accepted.
 - Reproduction layer: Jest unit/provider/renderer test; native device reproduction pending.
 
 ## Suspected issues requiring additional confirmation
@@ -113,5 +115,5 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 - Reminders may not fire after reboot unless the app is reopened to resynchronize.
 - The SQLite database is not encrypted at rest; app lock protects the UI.
 
-No application source fixes, migrations or expectation changes to conceal failures were made.
+BUG-008 application validation is fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
 

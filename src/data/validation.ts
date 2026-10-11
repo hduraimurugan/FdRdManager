@@ -30,7 +30,7 @@ export function validateFdDraft(draft: Record<string, any>): FieldErrors {
   if (isBlank(draft.bankName)) errors.bankName = 'Select a bank';
 
   const principal = toNumber(draft.principalAmount);
-  if (isBlank(draft.principalAmount) || Number.isNaN(principal)) errors.principalAmount = 'Enter a valid amount';
+  if (isBlank(draft.principalAmount) || !Number.isFinite(principal)) errors.principalAmount = 'Enter a valid amount';
   else if (principal <= 0) errors.principalAmount = 'Amount must be greater than 0';
 
   const rate = toNumber(draft.interestRate);
@@ -57,7 +57,7 @@ export function validateRdDraft(draft: Record<string, any>): FieldErrors {
   if (isBlank(draft.bankName)) errors.bankName = 'Select a bank';
 
   const installment = toNumber(draft.monthlyInstallment);
-  if (isBlank(draft.monthlyInstallment) || Number.isNaN(installment)) errors.monthlyInstallment = 'Enter a valid amount';
+  if (isBlank(draft.monthlyInstallment) || !Number.isFinite(installment)) errors.monthlyInstallment = 'Enter a valid amount';
   else if (installment <= 0) errors.monthlyInstallment = 'Amount must be greater than 0';
 
   const rate = toNumber(draft.interestRate);

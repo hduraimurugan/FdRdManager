@@ -10,7 +10,16 @@ it('VAL-002 blank, NaN and rate bounds fail consistently for RD', () => {
   expect(isValidDraft({ field: 'invalid' })).toBe(false);
   expect(isValidDraft({})).toBe(true);
 });
-it('BUG-008 overflowing principal or installment must fail validation', () => {
-  expect(validateFdDraft({ ...fd(), principalAmount: '1e309' }).principalAmount).toBeDefined();
-  expect(validateRdDraft({ ...rd(), monthlyInstallment: '1e309' }).monthlyInstallment).toBeDefined();
+describe('BUG-008 non-finite amounts must fail validation', () => {
+  const amounts = ['1e309', '-1e309', 'Infinity', '-Infinity', Infinity, -Infinity, NaN];
+  it.each(amounts)('rejects FD principal %s', principalAmount => {
+    expect(validateFdDraft({ ...fd(), principalAmount }).principalAmount).toBe('Enter a valid amount');
+  });
+  it.each(amounts)('rejects RD installment %s', monthlyInstallment => {
+    expect(validateRdDraft({ ...rd(), monthlyInstallment }).monthlyInstallment).toBe('Enter a valid amount');
+  });
+  it.each(['0.01', '100000', '1e6'])('accepts finite positive amount %s for both forms', amount => {
+    expect(validateFdDraft({ ...fd(), principalAmount: amount }).principalAmount).toBeUndefined();
+    expect(validateRdDraft({ ...rd(), monthlyInstallment: amount }).monthlyInstallment).toBeUndefined();
+  });
 });
