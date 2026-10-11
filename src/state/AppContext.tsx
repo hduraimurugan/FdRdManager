@@ -17,7 +17,7 @@ import {
   deleteAllData,
 } from '../data/db';
 import { today, deriveFd, deriveRd, deriveEvents, deriveNotifications } from '../data/derive';
-import { todayIso, parseIsoDate } from '../data/finance';
+import { todayIso, parseIsoDate, addTenure, toIsoDate } from '../data/finance';
 import { navigate, goBack } from '../navigation/navigationRef';
 import {
   backupFilename,
@@ -878,7 +878,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         showToast(dialogKind + ' closed prematurely');
         goBack();
       } else if (c.action === 'renew') {
-        const newStartDate = todayIso();
+        let newStartDate = todayIso();
+        if (dialogKind === 'FD') {
+          const rec = stateRef.current.fdRaw.find(f => f.id === c.id);
+          if (!rec) {
+            dispatch({ type: 'CLOSE_CONFIRM' });
+            return;
+          }
+          newStartDate = toIsoDate(addTenure(parseIsoDate(rec.startDate), rec.tenureYears, rec.tenureMonths, rec.tenureDays));
+        }
         dispatch({ type: 'RENEW', kind: dialogKind, id: c.id, newStartDate });
         persistRenew(dialogKind, c.id, newStartDate);
         showToast(dialogKind + ' renewed successfully');

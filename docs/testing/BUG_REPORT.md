@@ -1,6 +1,6 @@
 # Bug Report
 
-Snapshot: 2026-10-11. Status: **BUG-007 and BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
+Snapshot: 2026-10-11. Status: **BUG-006, BUG-007 and BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
 
 Severity: High = data reliability/security/business outcome; Medium = incorrect validation, schedule or blocked workflow. These are review priorities, not proof of exploitation.
 
@@ -13,7 +13,7 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 | BUG-003 | High | Portfolio values remain stale after foreground return | Confirmed; failing regression; fix deferred |
 | BUG-004 | High | Failed save leaves an unpersisted deposit visible | Confirmed; failing regression; fix deferred |
 | BUG-005 | High | Inactive-to-background transition restarts lock grace timer | Confirmed; failing regression; fix deferred |
-| BUG-006 | High | FD renewal starts today instead of the promised maturity date | Confirmed; failing regression; fix deferred |
+| BUG-006 | High | FD renewal starts today instead of the promised maturity date | Fixed; regression passing |
 | BUG-007 | Medium | Matured FD has no renewal action | Fixed; regression passing |
 | BUG-008 | Medium | Overflowing amount passes form validation | Fixed; regression passing |
 
@@ -69,12 +69,14 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 
 ## BUG-006: FD renewal starts today instead of the promised maturity date
 
-- Severity: **High**. Status: open, fix deferred.
-- Source: [src/state/AppContext.tsx](../../src/state/AppContext.tsx), line 862 (`const newStartDate = todayIso()`).
+- Severity: **High**. Status: fixed on 2026-10-11.
+- Source: [src/state/AppContext.tsx](../../src/state/AppContext.tsx), renewal branch of `runConfirm`.
 - Executable regression: [src/state/AppContext.test.tsx](../../src/state/AppContext.test.tsx); filter with `npm test -- --runInBand --testNamePattern=BUG-006`.
 - Preconditions and steps: On 15 June 2026, renew an FD maturing 1 January 2027 through the renewal confirmation action. The detail dialog promises renewal from maturity.
 - Expected: Renewed start date is 1 January 2027.
-- Actual/evidence: Renewed start date is 15 June 2026, shortening/replacing the current term.
+- Original actual/evidence: Renewed start date was 15 June 2026, shortening/replacing the current term.
+- Fix: FD renewal computes the existing maturity date from the stored start date and tenure, then uses it as the new start date in both reducer state and persistence. Tenure is preserved and renewal count increments once. Matured FDs also renew from their previous maturity date.
+- Verification: All 3 BUG-006 regressions pass, covering active/matured FDs, month-end clamping with extra days, derived next maturity, persisted fields and reload. Targeted ESLint passes. The broader provider/screen run has 104 passing tests and 1 failure from the existing BUG-004 failed-save defect.
 - Reproduction layer: Jest unit/provider/renderer test; native device reproduction pending.
 
 ## BUG-007: Matured FD has no renewal action
@@ -86,7 +88,7 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 - Expected: A renewal action is available for the matured deposit with a pending renewal decision.
 - Original actual/evidence: Renew button was absent because only Active FDs could renew.
 - Fix: The Renew action is available for Active and Matured FDs and opens the existing renewal confirmation for the selected record. Closed and Prematurely Closed FDs remain ineligible.
-- Verification: All 74 screen tests pass, including matured/active renewal confirmation and closed-status exclusion regressions. Targeted ESLint reports 0 errors and 4 existing warnings. The separate renewal start-date defect (BUG-006) remains deferred.
+- Verification: All 74 screen tests pass, including matured/active renewal confirmation and closed-status exclusion regressions. Targeted ESLint reports 0 errors and 4 existing warnings. The separate renewal start-date defect (BUG-006) is now fixed.
 - Reproduction layer: Jest unit/provider/renderer test; native device reproduction pending.
 
 ## BUG-008: Overflowing amount passes form validation
@@ -117,5 +119,5 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 - Reminders may not fire after reboot unless the app is reopened to resynchronize.
 - The SQLite database is not encrypted at rest; app lock protects the UI.
 
-BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
+BUG-006 renewal start date, BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
 

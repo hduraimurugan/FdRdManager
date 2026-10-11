@@ -204,12 +204,24 @@ describe('APP: provider orchestration', () => {
     await run(() => actions.saveDraftFD(null));
     expect(state.toast).toBe('Failed to save — try again'); expect(state.fdList).toHaveLength(1);
   });
-  it('BUG-006 renewal uses the maturity date promised by the confirmation dialog', async () => {
+  it.each([
+    { startDate: '2026-01-01', tenureYears: 1, tenureMonths: 0, tenureDays: 0, renewedMaturity: '2028-01-01' },
+    { startDate: '2025-01-01', tenureYears: 1, tenureMonths: 0, tenureDays: 0, renewedMaturity: '2027-01-01' },
+    { startDate: '2026-01-31', tenureYears: 0, tenureMonths: 1, tenureDays: 2, renewedMaturity: '2026-04-04' },
+  ])('BUG-006 renewal from $startDate uses the maturity date promised by the confirmation dialog', async ({ renewedMaturity, ...term }) => {
+    const original = fd(term);
+    jest.mocked(db.loadAll).mockResolvedValue({ fds: [original], rds: [rd()] });
     await mount(); const maturityDate = state.fdList[0].maturityDate;
     await run(() => actions.askConfirm('renew', 'FD', 'fd-1', 'Renew?', 'Renew from maturity', 'Renew'));
     await run(() => actions.runConfirm());
     expect(state.fdList[0].startDate).toBe(maturityDate);
-    expect(db.upsertFd).toHaveBeenLastCalledWith(expect.objectContaining({ startDate: maturityDate }));
+    expect(state.fdList[0].maturityDate).toBe(renewedMaturity);
+    expect(state.fdList[0].renewalCount).toBe(original.renewalCount + 1);
+    expect(db.upsertFd).toHaveBeenLastCalledWith({ ...original, startDate: maturityDate, renewalCount: original.renewalCount + 1 });
+    const persisted = jest.mocked(db.upsertFd).mock.calls[0][0];
+    jest.mocked(db.loadAll).mockResolvedValue({ fds: [persisted], rds: [rd()] });
+    await run(() => actions.retryLoad());
+    expect(state.fdList[0]).toMatchObject({ startDate: maturityDate, maturityDate: renewedMaturity, renewalCount: original.renewalCount + 1 });
   });
   it('APP-019 foreground resynchronizes reminders and settings failures do not reject UI actions', async () => {
     jest.mocked(db.getSetting).mockImplementation(async key => key === 'remindersEnabled' ? 'true' : null);
