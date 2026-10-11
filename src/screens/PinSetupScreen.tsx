@@ -1,3 +1,4 @@
+import { IconLock } from '../components/icons/Icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -106,7 +107,7 @@ export default function PinSetupScreen({ route }: Props) {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title={mode === 'change' ? 'Change PIN' : 'Set up PIN'} showBack onBack={appActions.back} />
+      <TopAppBar titleIcon={<IconLock size={18} color={theme.accent} />} title={mode === 'change' ? 'Change PIN' : 'Set up PIN'} showBack onBack={appActions.back} />
       <View style={styles.container}>
         <Card style={styles.card}>
           <Text style={[styles.label, { color: theme.text }]}>{stepLabel[step]}</Text>

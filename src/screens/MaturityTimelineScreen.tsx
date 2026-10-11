@@ -7,7 +7,7 @@ import { timelineMonths } from '../state/selectors';
 import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
-import BankLogo from '../components/BankLogo';
+import BankBadge from '../components/BankBadge';
 import EmptyState from '../components/EmptyState';
 import { IconCalendar } from '../components/icons/Icons';
 
@@ -20,7 +20,7 @@ export default function MaturityTimelineScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title="Maturity Timeline" showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconCalendar size={18} color={theme.accent} />} title="Maturity Timeline" showBack onBack={actions.back} />
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
@@ -47,7 +47,7 @@ export default function MaturityTimelineScreen() {
                   <Card style={styles.itemCard}>
                     <View style={styles.itemRow}>
                       <View style={styles.itemHeaderLeft}>
-                        <BankLogo bankName={it.bankName} size={30} />
+                        <BankBadge bankName={it.bankName} size={30} />
                         <View style={styles.flexShrink}>
                           <Text style={[styles.itemTitle, { color: theme.text }]}>
                             {it.bankName} · {it.number}

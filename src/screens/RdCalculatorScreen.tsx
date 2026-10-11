@@ -1,3 +1,4 @@
+import { IconGrowth } from '../components/icons/Icons';
 import React, { useMemo } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
@@ -33,7 +34,7 @@ export default function RdCalculatorScreen() {
 
   return (
     <KeyboardAvoidingView style={[styles.flex, { backgroundColor: theme.bg }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <TopAppBar title="RD Calculator" showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconGrowth size={18} color={theme.accent} />} title="RD Calculator" showBack onBack={actions.back} />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <CalculatorHeading title="Build savings, month by month" subtitle="Estimate how regular monthly deposits can grow. Your estimate updates as you edit." />
         {result ? <CalculatorSummary deposited={result.totalDeposited} interest={result.interestEarned} maturityDate={formatDate(result.maturityDate, 'medium')} caption="Estimated maturity value" detail={`${result.totalMonths} monthly deposits of ${formatINR(Number(rc.monthlyInstallment))}`} /> : null}

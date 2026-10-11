@@ -1,3 +1,4 @@
+import { IconClock } from '../components/icons/Icons';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
@@ -29,7 +30,7 @@ export default function ReminderSettingsScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title="Notification Reminders" showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconClock size={18} color={theme.accent} />} title="Notification Reminders" showBack onBack={actions.back} />
       <ScrollView contentContainerStyle={styles.container}>
         <Card style={styles.introCard}>
           <Text style={[styles.title, { color: theme.text }]}>Get notified about deposits and payouts</Text>

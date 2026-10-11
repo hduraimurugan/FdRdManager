@@ -1,6 +1,6 @@
 # Bug Report
 
-Snapshot: 2026-10-11. Status: **BUG-001 through BUG-008 fixed**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
+Snapshot: 2026-10-11. Status: **BUG-001 through BUG-009 fixed**. BUG-009 was confirmed by Android configuration change on a connected device; BUG-001 through BUG-008 were reproduced by automated tests against unmodified application source.
 
 Severity: High = data reliability/security/business outcome; Medium = incorrect validation, schedule or blocked workflow. These are review priorities, not proof of exploitation.
 
@@ -16,6 +16,18 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 | BUG-006 | High | FD renewal starts today instead of the promised maturity date | Fixed; regression passing |
 | BUG-007 | Medium | Matured FD has no renewal action | Fixed; regression passing |
 | BUG-008 | Medium | Overflowing amount passes form validation | Fixed; regression passing |
+| BUG-009 | Medium | Android font-size changes crash restored navigation screens | Fixed; Android build and device verification passing |
+
+## BUG-009: Android font-size changes crash restored navigation screens
+
+- Severity: **Medium**. Status: fixed on 2026-10-11.
+- Source: [android/app/src/main/java/com/fdrdmanager/MainActivity.kt](../../android/app/src/main/java/com/fdrdmanager/MainActivity.kt), `MainActivity.onCreate`.
+- Preconditions and steps: Launch the Android app with saved deposits and change the system font scale, which recreates the activity with Android's saved fragment state.
+- Expected: The activity returns to the app and navigation screens render at the new font scale.
+- Original actual/evidence: Android throws `Screen fragments should never be restored` while restoring a `react-native-screens` fragment.
+- Fix: Install `RNScreensFragmentFactory` on the support fragment manager before `super.onCreate`, following the installed `react-native-screens` Android instructions.
+- Verification: `:app:assembleDebug` succeeds; the rebuilt APK installs and opens with saved portfolio data after a system font-scale change. Android logs show no recurrence of the fragment-restoration crash. Full Jest suite: 24 suites and 426 tests pass; TypeScript, ESLint, and `git diff --check` pass.
+- Reproduction layer: Confirmed on Android device; navigation crash found on configuration change, fixed build verified on device.
 
 ## BUG-001: Future RD incorrectly has an installment due
 

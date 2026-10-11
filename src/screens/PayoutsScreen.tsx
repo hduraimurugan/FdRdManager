@@ -7,7 +7,7 @@ import { payoutGroups } from '../state/selectors';
 import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
-import BankLogo from '../components/BankLogo';
+import BankBadge from '../components/BankBadge';
 import { IconClock } from '../components/icons/Icons';
 
 export default function PayoutsScreen() {
@@ -74,7 +74,7 @@ export default function PayoutsScreen() {
                 <Pressable key={e.id} onPress={() => openRecord(e.kind, e.recordId)}>
                   <Card style={styles.eventCard}>
                     <View style={styles.eventIconWrap}>
-                      <BankLogo bankName={e.bank} />
+                      <BankBadge bankName={e.bank} />
                       <View style={[styles.kindBadge, { backgroundColor: e.kindBadgeBg }]}>
                         <Text style={styles.kindBadgeText}>{e.kind}</Text>
                       </View>

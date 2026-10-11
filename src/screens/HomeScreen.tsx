@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
@@ -9,16 +9,18 @@ import { today } from '../data/derive';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
-import BankLogo from '../components/BankLogo';
+import BankBadge from '../components/BankBadge';
 import DonutChart from '../components/DonutChart';
 import CashFlowCard from '../components/CashFlowCard';
 import SkeletonBlock from '../components/SkeletonBlock';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
-import { IconTrendUp, IconCalendar, IconChevronRight, IconWallet, IconBell } from '../components/icons/Icons';
+import { IconTrendUp, IconCalendar, IconChevronRight, IconWallet, IconBell, IconPlus } from '../components/icons/Icons';
 
 export default function HomeScreen() {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const largeText = fontScale > 1.25;
   const state = useAppState();
   const actions = useAppActions();
   const { refreshing, onRefresh } = useRefresh();
@@ -31,6 +33,15 @@ export default function HomeScreen() {
   const urgent = useMemo(() => urgentNotifications(state, theme), [state, theme]);
   const banks = useMemo(() => bankDistribution(state), [state]);
   const types = useMemo(() => typeDistribution(state, theme), [state, theme]);
+  const quickActions = (
+    <View style={styles.quickActions}>
+      {(['FD', 'RD'] as const).map(kind => (
+        <Pressable key={kind} accessibilityRole="button" accessibilityLabel={`Add ${kind}`} onPress={kind === 'FD' ? actions.openAddFD : actions.openAddRD} style={[styles.quickAction, { backgroundColor: theme.card, borderColor: theme.borderStrong }]}>
+          <IconPlus size={18} color={theme.accent} /><Text style={[styles.quickActionText, { color: theme.accent }]}>Add {kind}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
   const isEmpty = state.fdList.length === 0 && state.rdList.length === 0;
 
   if (state.loadError) {
@@ -54,6 +65,7 @@ export default function HomeScreen() {
   if (isEmpty) {
     return (
       <ScrollView contentContainerStyle={styles.emptyContainer} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}>
+        {quickActions}
         <EmptyState
           title="No deposits yet"
           subtitle="Add your first FD or RD to see your portfolio here."
@@ -88,13 +100,13 @@ export default function HomeScreen() {
         </View>
         <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.heroValue, { color: theme.text }]}>₹{metrics.currentValueFmt}</Text>
         <Text style={[styles.heroExact, { color: theme.textMuted }]}>{metrics.currentValueExact} across active deposits</Text>
-        <View style={[styles.heroRow, { borderTopColor: theme.tint(theme.text, 0.1) }]}>
+        <View style={[styles.heroRow, largeText && styles.stack, { borderTopColor: theme.tint(theme.text, 0.1) }]}>
           <View style={styles.flexShrink}>
-            <Text style={[styles.heroItemLabel, { color: theme.textMuted }]}>Invested (all)</Text>
+            <Text style={[styles.heroItemLabel, { color: theme.textMuted }]}>Invested · all deposits</Text>
             <Text style={[styles.heroItemValue, { color: theme.text }]}>₹{metrics.totalInvestedFmt}</Text>
           </View>
           <View style={styles.flexShrink}>
-            <Text style={[styles.heroItemLabel, { color: theme.textMuted }]}>Avg. active rate</Text>
+            <Text style={[styles.heroItemLabel, { color: theme.textMuted }]}>Avg. rate · active</Text>
             <Text style={[styles.heroItemValue, { color: theme.text }]}>{metrics.weightedRateLabel} <Text style={styles.rateUnit}>p.a.</Text></Text>
           </View>
           <View style={styles.flexShrink}>
@@ -104,7 +116,9 @@ export default function HomeScreen() {
         </View>
       </LinearGradient>
 
-      <View style={styles.statsGrid}>
+      {quickActions}
+
+      <View style={[styles.statsGrid, largeText && styles.stack]}>
         <Card style={styles.statCard}>
           <View style={[styles.statIcon, { backgroundColor: theme.tint(theme.success, 0.12) }]}>
             <IconTrendUp color={theme.success} size={18} />
@@ -117,7 +131,7 @@ export default function HomeScreen() {
           <View style={[styles.statIcon, { backgroundColor: theme.tint(theme.orange, 0.12) }]}>
             <IconCalendar color={theme.orange} size={18} />
           </View>
-          <Text style={[styles.statLabel, { color: theme.textMuted }]}>Maturity value</Text>
+          <Text style={[styles.statLabel, { color: theme.textMuted }]}>Estimated maturity</Text>
           <Text style={[styles.statValue, { color: theme.text }]}>₹{metrics.maturityValueFmt}</Text>
           <Text style={[styles.cardCaption, { color: theme.textMuted }]}>Active deposits at maturity</Text>
         </Card>
@@ -125,13 +139,11 @@ export default function HomeScreen() {
 
       <Card style={styles.activityCard}>
         <Text style={[styles.sectionLabel, { color: theme.text }]}>This month</Text>
-        <View style={styles.activityRow}>
-          <View style={styles.flexShrink}><Text style={[styles.activityValue, { color: theme.accent }]}>{metrics.payoutsThisMonthFmt}</Text><Text style={[styles.cardCaption, { color: theme.textMuted }]}>Payouts & installments</Text></View>
-          <View style={[styles.activityDivider, { backgroundColor: theme.borderStrong }]} />
-          <View style={styles.flexShrink}><Text style={[styles.activityValue, { color: theme.text }]}>{metrics.maturitiesThisMonth}</Text><Text style={[styles.cardCaption, { color: theme.textMuted }]}>Maturities</Text></View>
-          <View style={[styles.activityDivider, { backgroundColor: theme.borderStrong }]} />
-          <View style={styles.flexShrink}><Text style={[styles.activityValue, { color: theme.text }]}>{metrics.maturedCount}</Text><Text style={[styles.cardCaption, { color: theme.textMuted }]}>Matured overall</Text></View>
+        <View style={[styles.activityRow, largeText && styles.stack]}>
+          <View style={styles.flexShrink}><Text style={[styles.activityValue, { color: theme.mode === 'dark' ? theme.success : '#236747' }]}>{metrics.interestThisMonthFmt}</Text><Text style={[styles.cardCaption, { color: theme.textMuted }]}>Interest payouts · incoming</Text></View>
+          <View style={styles.flexShrink}><Text style={[styles.activityValue, { color: theme.text }]}>{metrics.installmentsThisMonthFmt}</Text><Text style={[styles.cardCaption, { color: theme.textMuted }]}>RD installments · outgoing</Text></View>
         </View>
+        <Text style={[styles.cardCaption, styles.monthNote, { color: theme.textMuted }]}>{metrics.maturitiesThisMonth} maturities this month · {metrics.maturedCount} matured overall</Text>
       </Card>
 
       {urgent.length > 0 && (
@@ -168,7 +180,7 @@ export default function HomeScreen() {
             <View key={b.bank}>
               <View style={styles.rowBetween}>
                 <View style={styles.bankLabelRow}>
-                  <BankLogo bankName={b.bank} size={28} />
+                  <BankBadge bankName={b.bank} size={28} />
                   <Text style={[styles.bankLabel, { color: theme.text }]}>{b.bank}</Text>
                 </View>
                 <Text style={[styles.bankAmount, { color: theme.text }]}>{b.amountFmt}</Text>
@@ -243,25 +255,30 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  stack: { flexDirection: 'column' },
+  quickActions: { flexDirection: 'row', gap: 10 },
+  quickAction: { flex: 1, minHeight: 48, padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, borderWidth: 1 },
+  quickActionText: { fontFamily: fontFamily.semibold, fontSize: 14 },
+  monthNote: { marginTop: 14 },
   container: {
     padding: 16,
-    paddingBottom: 100,
-    gap: 20,
+    paddingBottom: 24,
+    gap: 16,
   },
   emptyContainer: {
     padding: 16,
-    paddingBottom: 100,
-    gap: 20,
+    paddingBottom: 24,
+    gap: 16,
     flexGrow: 1,
     justifyContent: 'center',
   },
   hero: {
     borderRadius: 24,
-    padding: 22,
+    padding: 18,
   },
   heroLabel: {
     fontFamily: fontFamily.semibold,
-    fontSize: 10.5,
+    fontSize: 12,
     letterSpacing: 0.2,
   },
   heroSub: {
@@ -270,7 +287,7 @@ const styles = StyleSheet.create({
   },
   heroValue: {
     fontFamily: fontFamily.extrabold,
-    fontSize: 40,
+    fontSize: 34,
     letterSpacing: -1.5,
     marginTop: 8,
     fontVariant: ['tabular-nums'],
@@ -278,13 +295,13 @@ const styles = StyleSheet.create({
   heroRow: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 20,
-    paddingTop: 16,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
   },
   heroItemLabel: {
     fontFamily: fontFamily.regular,
-    fontSize: 10,
+    fontSize: 12,
   },
   heroItemValue: {
     fontFamily: fontFamily.bold,
@@ -388,7 +405,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   typeCard: {
-    gap: 20,
+    gap: 16,
     borderRadius: 22,
   },
   typeList: {

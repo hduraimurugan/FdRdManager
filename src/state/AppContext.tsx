@@ -392,7 +392,10 @@ function reducer(state: RawState, action: Action): RawState {
     case 'SET_TAB':
       return { ...state, activeTab: action.tab };
     case 'SET_PORTFOLIO_TAB':
-      return { ...state, portfolioTab: action.tab };
+      return {
+        ...state, portfolioTab: action.tab,
+        filterType: (action.tab === 'FD' ? state.fdRaw.some(record => record.fdType === state.filterType) : state.rdRaw.some(record => record.rdType === state.filterType)) ? state.filterType : 'All',
+      };
     case 'SET_SEARCH':
       return { ...state, search: action.value };
     case 'SET_FILTER_BANK':

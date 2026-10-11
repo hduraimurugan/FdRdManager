@@ -56,7 +56,7 @@ export default function BackupRestoreScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title="Backup & Restore" showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconImport size={18} color={theme.accent} />} title="Backup & Restore" showBack onBack={actions.back} />
       <View style={styles.container}>
         <Card style={styles.card}>
           <View style={[styles.rowIcon, { backgroundColor: 'rgba(91,158,224,0.15)' }]}>

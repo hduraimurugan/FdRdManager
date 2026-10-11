@@ -10,6 +10,29 @@
 // isolated in-memory database — this mirrors a fresh app install for every test case.
 
 import type { StoredFd, StoredRd } from './db';
+import { buildBackupEnvelope, serializeBackup, validateBackupJson } from './backupSchema';
+
+it('preserves custom and legacy bank names through SQLite and backup restore for FD/RD', async () => {
+  jest.resetModules();
+  const db = loadDb();
+  await db.openDb();
+  const f = sampleFd({ bankName: 'My Cooperative Bank' });
+  const r = sampleRd({ bankName: 'North East Small Finance Bank' });
+  await db.upsertFd(f);
+  await db.upsertRd(r);
+  const saved = await db.loadAll();
+  expect(saved.fds[0].bankName).toBe(f.bankName);
+  expect(saved.rds[0].bankName).toBe(r.bankName);
+  const restored = validateBackupJson(serializeBackup(buildBackupEnvelope(saved.fds, saved.rds, {})));
+  expect(restored.ok).toBe(true);
+  if (!restored.ok) throw new Error('Backup round trip failed');
+  await db.deleteAllData();
+  await db.upsertFd(restored.fds[0]);
+  await db.upsertRd(restored.rds[0]);
+  const reloaded = await db.loadAll();
+  expect(reloaded.fds[0].bankName).toBe(f.bankName);
+  expect(reloaded.rds[0].bankName).toBe(r.bankName);
+});
 
 type DbModule = typeof import('./db');
 

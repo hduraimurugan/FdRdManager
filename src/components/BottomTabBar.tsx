@@ -79,7 +79,7 @@ function TabItem({
           <Icon size={20} color={selectedIconColor} />
         </Animated.View>
       </View>
-      <Animated.Text style={[styles.label, { color: active ? activeColor : inactiveColor }]}>
+      <Animated.Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.2} style={[styles.label, { color: active ? activeColor : inactiveColor }]}>
         {label}
       </Animated.Text>
     </Pressable>

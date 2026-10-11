@@ -7,6 +7,7 @@ import { IconBack, IconBell } from './icons/Icons';
 
 export default function TopAppBar({
   title,
+  titleIcon,
   showBack = false,
   onBack,
   showBell = false,
@@ -14,6 +15,7 @@ export default function TopAppBar({
   onBellPress,
 }: {
   title: string;
+  titleIcon?: React.ReactNode;
   showBack?: boolean;
   onBack?: () => void;
   showBell?: boolean;
@@ -35,11 +37,10 @@ export default function TopAppBar({
         >
           <IconBack color={theme.text} />
         </Pressable>
-      ) : (
-        <View style={styles.iconBtnSpacer} />
-      )}
+      ) : null}
       <View style={styles.titleWrap}>
-        <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
+        {titleIcon ? <View accessible={false} importantForAccessibility="no-hide-descendants" style={[styles.titleIcon, !showBack && styles.mainIcon, { backgroundColor: theme.tint(theme.accent, 0.12) }]}>{titleIcon}</View> : null}
+        <Text accessibilityRole="header" style={[styles.title, { color: theme.text }]}>
           {title}
         </Text>
       </View>
@@ -54,9 +55,7 @@ export default function TopAppBar({
           <IconBell color={theme.text} />
           {unreadCount > 0 && <View style={[styles.dot, { backgroundColor: theme.danger, borderColor: theme.bg }]} />}
         </Pressable>
-      ) : (
-        <View style={styles.iconBtnSpacer} />
-      )}
+      ) : null}
     </View>
   );
 }
@@ -72,8 +71,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   iconBtn: {
-    width: 36,
-    height: 36,
+    width: 48,
+    height: 48,
     borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
@@ -81,21 +80,21 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   iconBtnRight: {
-    width: 38,
-    height: 38,
+    width: 48,
+    height: 48,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  iconBtnSpacer: {
-    width: 36,
-    height: 36,
-    flexShrink: 0,
-  },
+  titleIcon: { width: 28, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  mainIcon: { width: 42, height: 42, borderRadius: 14 },
   titleWrap: {
     flex: 1,
     minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   title: {
     flexShrink: 1,

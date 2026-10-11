@@ -4,7 +4,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAppActions, useAppState } from '../state/AppContext';
 import TopAppBar from '../components/TopAppBar';
 import BottomTabBar, { TAB_ORDER } from '../components/BottomTabBar';
-import Fab from '../components/Fab';
+import { IconHome, IconPortfolio, IconClock, IconCalculator, IconDots } from '../components/icons/Icons';
 import FilterSheet from '../components/FilterSheet';
 import HomeScreen from './HomeScreen';
 import PortfolioScreen from './PortfolioScreen';
@@ -13,12 +13,14 @@ import CalculatorsHubScreen from './CalculatorsHubScreen';
 import MoreScreen from './MoreScreen';
 
 const TITLES: Record<string, string> = {
-  home: 'Portfolio',
+  home: 'Home',
   portfolio: 'Portfolio',
   payouts: 'Payouts',
   calculators: 'Calculators',
   more: 'More',
 };
+
+const TITLE_ICONS = { home: IconHome, portfolio: IconPortfolio, payouts: IconClock, calculators: IconCalculator, more: IconDots };
 
 const PAGES: Record<string, React.ComponentType> = {
   home: HomeScreen,
@@ -36,6 +38,7 @@ export default function MainTabsScreen() {
   const scrollRef = useRef<ScrollViewInstance>(null);
   const [pagerHeight, setPagerHeight] = useState(0);
 
+  const TitleIcon = TITLE_ICONS[state.activeTab];
   const activeIndex = TAB_ORDER.indexOf(state.activeTab);
   // True while an activeTab change is a *result* of the user's own swipe (set
   // right before we dispatch it from handleMomentumScrollEnd). The sync effect
@@ -82,6 +85,7 @@ export default function MainTabsScreen() {
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
       <TopAppBar
         title={TITLES[state.activeTab]}
+        titleIcon={<TitleIcon size={22} color={theme.accent} />}
         showBell={state.activeTab === 'home'}
         unreadCount={state.notifications.length}
         onBellPress={actions.goNotifications}
@@ -105,12 +109,6 @@ export default function MainTabsScreen() {
           })}
         </ScrollView>
 
-        {state.activeTab === 'portfolio' && (
-          <Fab
-            onPress={state.portfolioTab === 'FD' ? actions.openAddFD : actions.openAddRD}
-            accessibilityLabel={state.portfolioTab === 'FD' ? 'Add FD' : 'Add RD'}
-          />
-        )}
       </View>
       <BottomTabBar activeTab={state.activeTab} onChange={actions.setTab} />
       <FilterSheet />

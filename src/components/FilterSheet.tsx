@@ -24,7 +24,7 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
   );
   if (bg === undefined) {
     return (
-      <Pressable onPress={onPress}>
+      <Pressable accessibilityRole="button" accessibilityState={{ selected: active }} onPress={onPress}>
         <LinearGradient colors={(style.bg as any).colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={[styles.chip, { borderColor: 'transparent' }]}>
           {content}
         </LinearGradient>
@@ -32,7 +32,7 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
     );
   }
   return (
-    <Pressable onPress={onPress} style={[styles.chip, { backgroundColor: bg, borderColor: style.border }]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: active }} onPress={onPress} style={[styles.chip, { backgroundColor: bg, borderColor: style.border }]}>
       {content}
     </Pressable>
   );
@@ -90,7 +90,7 @@ export default function FilterSheet() {
                   { backgroundColor: active ? 'rgba(111,102,232,0.13)' : theme.card, borderColor: theme.border },
                 ]}
               >
-                <Text style={[styles.sortLabel, { color: theme.text }]}>{sd.label}</Text>
+                <Text style={[styles.sortLabel, { color: theme.text }]}>{sd.key === 'amount' && state.portfolioTab === 'RD' ? 'Monthly installment (highest first)' : sd.label}</Text>
                 {active && <IconCheck size={16} color={theme.accent} />}
               </Pressable>
             );
@@ -137,6 +137,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   chip: {
+    minHeight: 48,
+    justifyContent: 'center',
     paddingHorizontal: 13,
     paddingVertical: 7,
     borderRadius: 100,
@@ -151,6 +153,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   sortRow: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -160,6 +163,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sortLabel: {
+    flexShrink: 1,
     fontFamily: fontFamily.medium,
     fontSize: 13.5,
   },
@@ -168,6 +172,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   actionBtn: {
+    minHeight: 48,
     flex: 1,
     alignItems: 'center',
     paddingVertical: 13,
@@ -177,6 +182,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionGradient: {
+    minHeight: 48,
     alignItems: 'center',
     paddingVertical: 13,
     borderRadius: 14,

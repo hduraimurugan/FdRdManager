@@ -69,6 +69,7 @@ The APK is self-signed with this project's own release key (see [Release signing
 
 - **Home** — invested/current-value/interest/maturity summary, bank & type distribution, 6-month interest projection, upcoming maturities.
 - **Portfolio** — FD/RD tabs with search, filter (bank/type/status), and sort; add/edit/delete/close/renew a deposit.
+- **Bank selection** — offline searchable directory of 116 public, private, small-finance, regional rural, and foreign banks in India; search abbreviations such as SBI or enter an unlisted bank manually. Text badges replace bank artwork throughout the app. Existing bank names and backups stay compatible.
 - **Payouts** — overdue, due-today, this-week, this-month and upcoming payouts/installments, grouped.
 - **Calculators** — standalone FD (simple vs. compound) and RD calculators, independent of your saved data.
 - **Notifications** & **Maturity timeline** — cross-linked to the relevant FD/RD.

@@ -12,10 +12,10 @@ import { RootStackParamList } from '../navigation/types';
 import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
-import BankLogo from '../components/BankLogo';
+import BankBadge from '../components/BankBadge';
 import StatusBadge from '../components/StatusBadge';
 import ProgressBar from '../components/ProgressBar';
-import { IconChevronDown } from '../components/icons/Icons';
+import { IconRefresh, IconChevronDown } from '../components/icons/Icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RdDetail'>;
 
@@ -30,7 +30,7 @@ export default function RdDetailScreen({ route }: Props) {
   if (!rd) {
     return (
       <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-        <TopAppBar title="RD" showBack onBack={actions.back} />
+        <TopAppBar titleIcon={<IconRefresh size={18} color={theme.accent} />} title="RD" showBack onBack={actions.back} />
       </View>
     );
   }
@@ -39,7 +39,7 @@ export default function RdDetailScreen({ route }: Props) {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title={rd.rdNumber} showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconRefresh size={18} color={theme.accent} />} title={rd.rdNumber} showBack onBack={actions.back} />
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
@@ -47,7 +47,7 @@ export default function RdDetailScreen({ route }: Props) {
       >
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
-            <BankLogo bankName={rd.bankName} size={44} />
+            <BankBadge bankName={rd.bankName} size={44} />
             <View>
               <Text style={[styles.bankName, { color: theme.text }]}>{rd.bankName}</Text>
               <Text style={[styles.meta, { color: theme.textFaint }]}>

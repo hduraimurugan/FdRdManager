@@ -19,7 +19,7 @@ export default function ClearDataScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title="Delete all data" showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconWarning size={18} color={theme.accent} />} title="Delete all data" showBack onBack={actions.back} />
       <View style={styles.container}>
         <Card style={[styles.card, { borderColor: 'rgba(226,73,90,0.35)' }]}>
           <View style={[styles.iconWrap, { backgroundColor: 'rgba(226,73,90,0.13)' }]}>

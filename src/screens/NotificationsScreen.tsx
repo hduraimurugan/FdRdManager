@@ -19,7 +19,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title="Notifications" showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconBell size={18} color={theme.accent} />} title="Notifications" showBack onBack={actions.back} />
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}

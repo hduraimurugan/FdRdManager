@@ -126,18 +126,7 @@ export interface PortfolioNotification {
   recordId: string;
 }
 
-export const BANKS = [
-  'HDFC Bank',
-  'ICICI Bank',
-  'State Bank of India',
-  'Axis Bank',
-  'Kotak Mahindra Bank',
-  'Punjab National Bank',
-  'Bank of Baroda',
-  'Yes Bank',
-  'IDFC First Bank',
-  'Canara Bank',
-];
+export { BANK_DIRECTORY } from './banks';
 export const FD_TYPES = ['Regular', 'Senior Citizen', 'Tax Saver', 'NRE', 'NRO', 'Corporate'];
 export const RD_TYPES = ['Regular', 'Senior Citizen'];
 export const STATUSES = ['Active', 'Matured', 'Closed', 'Prematurely Closed'];

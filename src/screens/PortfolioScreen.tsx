@@ -1,164 +1,420 @@
 import React, { useMemo } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
-import { decorateFD, decorateRD, filteredSorted, DecoratedFD, DecoratedRD } from '../state/selectors';
-import { GRADIENT_ANGLE } from '../theme/colors';
+import {
+  decorateFD,
+  decorateRD,
+  filteredSorted,
+  portfolioMetrics,
+  DecoratedFD,
+  DecoratedRD,
+} from '../state/selectors';
+import { formatINR } from '../data/portfolioData';
 import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
-import BankLogo from '../components/BankLogo';
+import BankBadge from '../components/BankBadge';
 import StatusBadge from '../components/StatusBadge';
 import ProgressBar from '../components/ProgressBar';
 import SkeletonBlock from '../components/SkeletonBlock';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
-import { IconSearch, IconFilter, IconBank, IconRefresh } from '../components/icons/Icons';
+import {
+  IconSearch,
+  IconFilter,
+  IconBank,
+  IconRefresh,
+  IconPlus,
+} from '../components/icons/Icons';
 
 type DecoratedItem = DecoratedFD | DecoratedRD;
+const SORT_LABELS = {
+  maturity: 'Maturity: soonest',
+  amount: 'Amount: highest',
+  rate: 'Rate: highest',
+};
 
 export default function PortfolioScreen() {
   const theme = useTheme();
   const state = useAppState();
   const actions = useAppActions();
+  const { fontScale } = useWindowDimensions();
   const { refreshing, onRefresh } = useRefresh();
-
   const kind = state.portfolioTab;
   const rawList = kind === 'FD' ? state.fdList : state.rdList;
-  const filtered = useMemo(() => filteredSorted(rawList as any, kind, state), [rawList, kind, state]);
   const items: DecoratedItem[] = useMemo(
-    () => (kind === 'FD' ? (filtered as any).map((f: any) => decorateFD(f, theme)) : (filtered as any).map((r: any) => decorateRD(r, theme))),
-    [filtered, kind, theme],
+    () =>
+      kind === 'FD'
+        ? filteredSorted(state.fdList, 'FD', state).map(record =>
+            decorateFD(record, theme),
+          )
+        : filteredSorted(state.rdList, 'RD', state).map(record =>
+            decorateRD(record, theme),
+          ),
+    [kind, state, theme],
   );
-  const filtersActive = state.filterBank !== 'All' || state.filterType !== 'All' || state.filterStatus !== 'All';
-  const hasAnyRecords = rawList.length > 0;
+  const metrics = useMemo(() => portfolioMetrics(state, kind), [state, kind]);
+  const filters = [
+    { label: state.filterBank, clear: () => actions.setFilterBank('All') },
+    { label: state.filterType, clear: () => actions.setFilterType('All') },
+    { label: state.filterStatus, clear: () => actions.setFilterStatus('All') },
+  ].filter(filter => filter.label !== 'All');
+  const add = kind === 'FD' ? actions.openAddFD : actions.openAddRD;
+  const stack = fontScale > 1.25;
 
-  if (state.loadError) {
+  if (state.loadError)
     return (
-      <View style={styles.container}>
-        <ErrorState title="Couldn't load deposits" subtitle="Something went wrong reading your saved data." onRetry={actions.retryLoad} compact />
+      <View style={styles.listPad}>
+        <ErrorState
+          title="Couldn't load deposits"
+          subtitle="Something went wrong reading your saved data."
+          onRetry={actions.retryLoad}
+          compact
+        />
       </View>
     );
-  }
+
+  const filterChips =
+    filters.length || state.search || state.sortBy !== 'maturity' ? (
+      <View style={styles.chips}>
+        {filters.map((filter, index) => (
+          <Pressable
+            key={index}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove ${filter.label} filter`}
+            onPress={filter.clear}
+            style={[
+              styles.chip,
+              { backgroundColor: theme.tint(theme.accent, 0.12) },
+            ]}
+          >
+            <Text style={[styles.caption, { color: theme.accent }]}>
+              {filter.label} ×
+            </Text>
+          </Pressable>
+        ))}
+        <Pressable
+          accessibilityRole="button"
+          onPress={actions.resetFilters}
+          style={styles.textButton}
+        >
+          <Text style={[styles.caption, { color: theme.accent }]}>
+            Clear all
+          </Text>
+        </Pressable>
+      </View>
+    ) : null;
 
   return (
     <View style={styles.flex}>
       <View style={styles.controls}>
-        <View style={styles.tabSwitch}>
-          <Pressable
-            onPress={actions.setPortfolioTabFD}
-            style={styles.tabBtnWrap}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: kind === 'FD' }}
-            accessibilityLabel="Fixed Deposits"
-          >
-            {kind === 'FD' ? (
-              <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.tabBtn}>
-                <Text style={[styles.tabText, { color: '#fff' }]}>FD</Text>
-              </LinearGradient>
-            ) : (
-              <View style={styles.tabBtn}>
-                <Text style={[styles.tabText, { color: theme.textMuted }]}>FD</Text>
-              </View>
-            )}
-          </Pressable>
-          <Pressable
-            onPress={actions.setPortfolioTabRD}
-            style={styles.tabBtnWrap}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: kind === 'RD' }}
-            accessibilityLabel="Recurring Deposits"
-          >
-            {kind === 'RD' ? (
-              <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.tabBtn}>
-                <Text style={[styles.tabText, { color: '#fff' }]}>RD</Text>
-              </LinearGradient>
-            ) : (
-              <View style={styles.tabBtn}>
-                <Text style={[styles.tabText, { color: theme.textMuted }]}>RD</Text>
-              </View>
-            )}
-          </Pressable>
+        <View style={[styles.tabs, { backgroundColor: theme.inputBg }]}>
+          {(['FD', 'RD'] as const).map(tab => (
+            <Pressable
+              key={tab}
+              accessibilityRole="tab"
+              accessibilityLabel={
+                tab === 'FD' ? 'Fixed Deposits' : 'Recurring Deposits'
+              }
+              accessibilityState={{ selected: kind === tab }}
+              onPress={
+                tab === 'FD'
+                  ? actions.setPortfolioTabFD
+                  : actions.setPortfolioTabRD
+              }
+              style={[
+                styles.tab,
+                {
+                  backgroundColor: kind === tab ? theme.accent : 'transparent',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  {
+                    color:
+                      kind === tab
+                        ? theme.mode === 'dark'
+                          ? theme.bg
+                          : '#fff'
+                        : theme.textMuted,
+                  },
+                ]}
+              >
+                {tab}
+              </Text>
+              <Text
+                style={[
+                  styles.count,
+                  {
+                    color:
+                      kind === tab
+                        ? theme.mode === 'dark'
+                          ? theme.bg
+                          : '#fff'
+                        : theme.textMuted,
+                  },
+                ]}
+              >
+                {tab === 'FD' ? state.fdList.length : state.rdList.length}
+              </Text>
+            </Pressable>
+          ))}
         </View>
-
-        <View style={styles.searchRow}>
-          <View style={[styles.searchBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <IconSearch color={theme.textFaint} />
-            <TextInput
-              value={state.search}
-              onChangeText={actions.setSearch}
-              placeholder="Search bank, number, holder"
-              placeholderTextColor={theme.textFaint}
-              style={[styles.searchInput, { color: theme.text }]}
-              accessibilityLabel="Search bank, number, holder"
-            />
-          </View>
+        <View
+          style={[
+            styles.searchBox,
+            { backgroundColor: theme.card, borderColor: theme.borderStrong },
+          ]}
+        >
+          <IconSearch color={theme.textMuted} />
+          <TextInput
+            value={state.search}
+            onChangeText={actions.setSearch}
+            placeholder="Search bank, number, holder"
+            placeholderTextColor={theme.textMuted}
+            style={[styles.searchInput, { color: theme.text }]}
+            accessibilityLabel="Search bank, number, holder"
+            autoCorrect={false}
+          />
+          {state.search ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              onPress={() => actions.setSearch('')}
+              style={styles.textButton}
+            >
+              <Text style={[styles.caption, { color: theme.accent }]}>
+                Clear
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <View style={styles.toolbar}>
           <Pressable
             onPress={actions.openFilterSheet}
-            style={[styles.filterBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+            style={[
+              styles.filterButton,
+              { backgroundColor: theme.card, borderColor: theme.borderStrong },
+            ]}
             accessibilityRole="button"
-            accessibilityLabel={filtersActive ? 'Filter and sort, filters active' : 'Filter and sort'}
+            accessibilityLabel={
+              filters.length
+                ? `Filter and sort, ${filters.length} filters active`
+                : 'Filter and sort'
+            }
           >
-            <IconFilter color={theme.text} />
-            {filtersActive && <View style={styles.filterDotWrap}>
-              <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.filterDot} />
-            </View>}
+            <IconFilter color={theme.accent} />
+            <Text style={[styles.buttonText, { color: theme.text }]}>
+              Filter & sort{filters.length ? ` (${filters.length})` : ''}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={add}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${kind}`}
+            style={[styles.addButton, { backgroundColor: theme.accent }]}
+          >
+            <IconPlus
+              size={18}
+              color={theme.mode === 'dark' ? theme.bg : '#fff'}
+            />
+            <Text
+              style={[
+                styles.buttonText,
+                { color: theme.mode === 'dark' ? theme.bg : '#fff' },
+              ]}
+            >
+              Add {kind}
+            </Text>
           </Pressable>
         </View>
       </View>
-
       {!state.hydrated ? (
         <View style={styles.listPad}>
-          <SkeletonBlock height={104} />
-          <SkeletonBlock height={104} />
-          <SkeletonBlock height={104} />
+          <SkeletonBlock height={90} />
+          <SkeletonBlock height={180} />
+          <SkeletonBlock height={180} />
         </View>
       ) : (
         <FlatList
           data={items}
           keyExtractor={item => item.id}
-          contentContainerStyle={items.length === 0 ? styles.emptyListPad : styles.listPad}
+          contentContainerStyle={styles.listPad}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.card} />}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.accent}
+              colors={[theme.accent]}
+              progressBackgroundColor={theme.card}
+            />
+          }
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
+              <View
+                style={[
+                  styles.summary,
+                  {
+                    backgroundColor: theme.tint(theme.accent, 0.09),
+                    borderColor: theme.tint(theme.accent, 0.2),
+                  },
+                ]}
+              >
+                <Text style={[styles.summaryHeading, { color: theme.accent }]}>
+                  {metrics.activeCount} active {kind}
+                  {metrics.activeCount === 1 ? '' : 's'} · All active totals
+                </Text>
+                <View style={[styles.metrics, stack && styles.stacked]}>
+                  <View style={styles.metric}>
+                    <Text style={[styles.caption, { color: theme.textMuted }]}>
+                      Invested
+                    </Text>
+                    <Text style={[styles.metricValue, { color: theme.text }]}>
+                      {metrics.investedFmt}
+                    </Text>
+                  </View>
+                  <View style={styles.metric}>
+                    <Text style={[styles.caption, { color: theme.textMuted }]}>
+                      Estimated maturity
+                    </Text>
+                    <Text style={[styles.metricValue, { color: theme.text }]}>
+                      {metrics.maturityFmt}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              {filterChips}
+              <View style={styles.results}>
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[styles.caption, { color: theme.textMuted }]}
+                >
+                  {items.length} of {rawList.length} deposits
+                </Text>
+                <Text style={[styles.caption, { color: theme.textMuted }]}>
+                  {SORT_LABELS[state.sortBy]}
+                </Text>
+              </View>
+            </View>
+          }
           ListEmptyComponent={
-            hasAnyRecords ? (
+            rawList.length ? (
               <EmptyState onAction={actions.resetFilters} compact />
             ) : (
               <EmptyState
                 title={`No ${kind}s yet`}
-                subtitle={`Tap the + button to add your first ${kind}.`}
+                subtitle={`Add your first ${kind} to track its growth and maturity.`}
                 actionLabel={`Add ${kind}`}
-                onAction={kind === 'FD' ? actions.openAddFD : actions.openAddRD}
+                onAction={add}
                 gradient={theme.gradientPortfolio}
-                icon={kind === 'FD' ? <IconBank size={30} color="#fff" /> : <IconRefresh size={30} color="#fff" />}
+                icon={
+                  kind === 'FD' ? (
+                    <IconBank size={30} color={theme.accent} />
+                  ) : (
+                    <IconRefresh size={30} color={theme.accent} />
+                  )
+                }
               />
             )
           }
           renderItem={({ item }) => (
-            <Pressable onPress={() => (item.kind === 'FD' ? actions.openFDDetail(item.id) : actions.openRDDetail(item.id))}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${item.bankName}, ${item.number}, ${item.amountFmt}, ${item.statusLabel}. View deposit`}
+              onPress={() =>
+                item.kind === 'FD'
+                  ? actions.openFDDetail(item.id)
+                  : actions.openRDDetail(item.id)
+              }
+            >
               <Card style={styles.itemCard}>
-                <View style={styles.itemHeader}>
-                  <View style={styles.itemHeaderLeft}>
-                    <BankLogo bankName={item.bankName} />
-                    <View style={styles.flexShrink}>
-                      <Text style={[styles.itemBank, { color: theme.text }]}>{item.bankName}</Text>
-                      <Text style={[styles.itemMeta, { color: theme.textFaint }]}>
-                        {item.number} · {item.typeLabel}
-                      </Text>
-                    </View>
+                <View style={styles.bankRow}>
+                  <BankBadge bankName={item.bankName} />
+                  <View style={styles.bankText}>
+                    <Text style={[styles.bankName, { color: theme.text }]}>
+                      {item.bankName}
+                    </Text>
+                    <Text style={[styles.caption, { color: theme.textMuted }]}>
+                      {item.number} · {item.typeLabel}
+                    </Text>
                   </View>
-                  <StatusBadge bg={item.statusBg} fg={item.statusFg} label={item.statusLabel} />
                 </View>
-                <View style={styles.amountRow}>
-                  <Text style={[styles.amount, { color: theme.text }]}>{item.amountFmt}</Text>
-                  <Text style={[styles.rate, { color: theme.success }]}>{item.rateLabel}</Text>
+                <View style={styles.statusRow}>
+                  <StatusBadge
+                    bg={item.statusBg}
+                    fg={item.statusFg}
+                    label={item.statusLabel}
+                  />
+                  <Text style={[styles.caption, { color: theme.textMuted }]}>
+                    {item.remainingLabel}
+                  </Text>
                 </View>
-                <View style={styles.progressLabelRow}>
-                  <Text style={[styles.progressLabel, { color: theme.textMuted }]}>{item.progressLabel}</Text>
-                  <Text style={[styles.progressLabel, { color: theme.textMuted }]}>{item.maturityLabel}</Text>
+                <View style={[styles.metrics, stack && styles.stacked]}>
+                  <View style={styles.metric}>
+                    <Text style={[styles.caption, { color: theme.textMuted }]}>
+                      {item.kind === 'FD' ? 'Principal' : 'Monthly installment'}
+                    </Text>
+                    <Text style={[styles.amount, { color: theme.text }]}>
+                      {item.amountFmt}
+                    </Text>
+                  </View>
+                  <View style={styles.metric}>
+                    <Text style={[styles.caption, { color: theme.textMuted }]}>
+                      Interest rate
+                    </Text>
+                    <Text
+                      style={[
+                        styles.rate,
+                        {
+                          color:
+                            theme.mode === 'dark' ? theme.success : '#236747',
+                        },
+                      ]}
+                    >
+                      {item.rateLabel}
+                    </Text>
+                  </View>
                 </View>
-                <ProgressBar progress={item.progressPct} fill={item.progressColor} />
+                <View
+                  style={[styles.maturity, { borderTopColor: theme.divider }]}
+                >
+                  <Text style={[styles.caption, { color: theme.textMuted }]}>
+                    {item.status === 'Closed' ||
+                    item.status === 'Prematurely Closed'
+                      ? 'Scheduled maturity value'
+                      : 'Estimated maturity value'}
+                  </Text>
+                  <Text style={[styles.maturityValue, { color: theme.text }]}>
+                    {formatINR(item.maturityAmount)}
+                  </Text>
+                  <Text style={[styles.caption, { color: theme.textMuted }]}>
+                    {item.maturityLabel}
+                  </Text>
+                </View>
+                <View style={styles.progress}>
+                  <Text style={[styles.caption, { color: theme.textMuted }]}>
+                    {item.progressLabel}
+                  </Text>
+                  <ProgressBar
+                    progress={item.progressPct}
+                    fill={item.progressColor}
+                  />
+                </View>
               </Card>
             </Pressable>
           )}
@@ -169,141 +425,125 @@ export default function PortfolioScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: {
+  flex: { flex: 1 },
+  controls: { paddingHorizontal: 16, paddingTop: 10, gap: 8 },
+  tabs: { flexDirection: 'row', borderRadius: 14, padding: 4, gap: 4 },
+  tab: {
     flex: 1,
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  controls: {
-    paddingHorizontal: 16,
-    gap: 14,
-  },
-  tabSwitch: {
     flexDirection: 'row',
-    borderRadius: 12,
-    padding: 3,
-    gap: 3,
-    backgroundColor: 'rgba(120,120,140,0.08)',
-  },
-  tabBtnWrap: {
-    flex: 1,
-  },
-  tabBtn: {
-    paddingVertical: 9,
-    borderRadius: 9,
+    gap: 10,
+    minHeight: 48,
+    borderRadius: 11,
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: 8,
   },
-  tabText: {
-    fontFamily: fontFamily.semibold,
-    fontSize: 13.5,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  tabText: { fontFamily: fontFamily.bold, fontSize: 14 },
+  count: { fontFamily: fontFamily.medium, fontSize: 12 },
   searchBox: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    height: 42,
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    paddingVertical: 10,
     fontFamily: fontFamily.regular,
-    fontSize: 13.5,
-    padding: 0,
+    fontSize: 14,
   },
-  filterBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+  toolbar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterButton: {
+    flex: 1,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+  },
+  addButton: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  buttonText: { fontFamily: fontFamily.semibold, fontSize: 14, flexShrink: 1 },
+  textButton: {
+    minHeight: 48,
+    minWidth: 48,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  filterDotWrap: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
+  listPad: { padding: 16, paddingBottom: 24, gap: 12 },
+  listHeader: { gap: 12 },
+  summary: { padding: 16, borderRadius: 18, borderWidth: 1, gap: 12 },
+  summaryHeading: { fontFamily: fontFamily.semibold, fontSize: 12 },
+  metrics: { flexDirection: 'row', gap: 16 },
+  stacked: { flexDirection: 'column' },
+  metric: { flex: 1, gap: 4, minWidth: 0 },
+  metricValue: {
+    fontFamily: fontFamily.bold,
+    fontSize: 17,
+    fontVariant: ['tabular-nums'],
   },
-  filterDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  listPad: {
-    padding: 16,
-    paddingTop: 14,
-    paddingBottom: 100,
-    gap: 10,
-  },
-  emptyListPad: {
-    padding: 16,
-    paddingTop: 14,
-    paddingBottom: 100,
-    gap: 10,
-    flexGrow: 1,
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    minHeight: 48,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     justifyContent: 'center',
+    maxWidth: '100%',
   },
-  itemCard: {
-    padding: 0,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  itemHeader: {
+  results: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+  },
+  itemCard: { padding: 16, gap: 14, borderRadius: 20 },
+  bankRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  bankText: { flex: 1, gap: 4, minWidth: 0 },
+  bankName: { fontFamily: fontFamily.semibold, fontSize: 15 },
+  caption: { fontFamily: fontFamily.regular, fontSize: 12, flexShrink: 1 },
+  statusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
-  },
-  itemHeaderLeft: {
-    flexDirection: 'row',
-    gap: 10,
-    minWidth: 0,
-    flexShrink: 1,
-  },
-  flexShrink: {
-    minWidth: 0,
-    flexShrink: 1,
-  },
-  itemBank: {
-    fontFamily: fontFamily.semibold,
-    fontSize: 14.5,
-  },
-  itemMeta: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    marginTop: 1,
-  },
-  amountRow: {
-    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginTop: 12,
   },
   amount: {
     fontFamily: fontFamily.bold,
-    fontSize: 19,
-    letterSpacing: -0.2,
+    fontSize: 21,
+    fontVariant: ['tabular-nums'],
   },
   rate: {
     fontFamily: fontFamily.semibold,
-    fontSize: 13,
+    fontSize: 17,
+    fontVariant: ['tabular-nums'],
   },
-  progressLabelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-    marginBottom: 5,
+  maturity: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
+    gap: 4,
   },
-  progressLabel: {
-    fontFamily: fontFamily.regular,
-    fontSize: 11.5,
+  maturityValue: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 17,
+    fontVariant: ['tabular-nums'],
   },
+  progress: { gap: 6 },
 });

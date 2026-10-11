@@ -1,3 +1,4 @@
+import { IconCalculator } from '../components/icons/Icons';
 import React, { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
@@ -48,7 +49,7 @@ export default function FdCalculatorScreen() {
 
   return (
     <KeyboardAvoidingView style={[styles.flex, { backgroundColor: theme.bg }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <TopAppBar title="FD Calculator" showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconCalculator size={18} color={theme.accent} />} title="FD Calculator" showBack onBack={actions.back} />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <CalculatorHeading title="See your lump sum grow" subtitle="Estimate what a fixed deposit could return. Your estimate updates as you edit." />
         {result ? <CalculatorSummary deposited={Number(fc.principal)} interest={result.compoundInterest} maturityDate={formatDate(result.maturityDate, 'medium')} caption="Estimated maturity value" detail={`${fc.compounding} compounding · ${result.totalDays.toLocaleString('en-IN')} days invested`} /> : null}

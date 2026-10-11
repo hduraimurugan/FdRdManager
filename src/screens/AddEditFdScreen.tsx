@@ -9,7 +9,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { fdEstimate } from '../state/selectors';
-import { BANKS, FD_TYPES, COMPOUNDING_FREQUENCIES, PAYOUT_FREQUENCIES, CREDIT_METHODS, formatINR } from '../data/portfolioData';
+import { FD_TYPES, COMPOUNDING_FREQUENCIES, PAYOUT_FREQUENCIES, CREDIT_METHODS, formatINR } from '../data/portfolioData';
 import { validateFdDraft, isValidDraft } from '../data/validation';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { RootStackParamList } from '../navigation/types';
@@ -18,8 +18,8 @@ import TopAppBar from '../components/TopAppBar';
 import FormField from '../components/FormField';
 import FormSelect from '../components/FormSelect';
 import DateField from '../components/DateField';
-import BankLogo from '../components/BankLogo';
-import { IconChevronDown } from '../components/icons/Icons';
+import BankPicker from '../components/BankPicker';
+import { IconBank, IconChevronDown } from '../components/icons/Icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddEditFD'>;
 
@@ -155,7 +155,7 @@ export default function AddEditFdScreen({ route }: Props) {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title={id ? 'Edit FD' : 'Add FD'} showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconBank size={18} color={theme.accent} />} title={id ? 'Edit FD' : 'Add FD'} showBack onBack={actions.back} />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={[styles.stepper, { borderBottomColor: theme.divider }]} accessibilityRole="tablist">
           {STEPS.map((label, index) => (
@@ -208,13 +208,10 @@ export default function AddEditFdScreen({ route }: Props) {
                 <>
                   <Card style={styles.section}>
                     <Text style={[styles.sectionLabel, { color: theme.text }]}>Your deposit</Text>
-                    <FormSelect
-                      label="Bank"
+                    <BankPicker
                       value={draft.bankName ?? ''}
-                      options={BANKS}
                       onChange={set('bankName')}
-                      placeholder="Select bank"
-                      renderOptionIcon={bank => <BankLogo bankName={bank} size={28} />}
+                      usedNames={[...state.fdList, ...state.rdList].map(record => record.bankName)}
                       error={errorFor('bankName')}
                     />
                     <FormField label="FD number" value={String(draft.fdNumber ?? '')} onChangeText={set('fdNumber')} error={errorFor('fdNumber')} />

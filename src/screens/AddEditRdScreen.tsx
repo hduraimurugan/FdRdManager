@@ -1,3 +1,4 @@
+import { IconRefresh } from '../components/icons/Icons';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -6,7 +7,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { rdEstimate } from '../state/selectors';
-import { BANKS, COMPOUNDING_FREQUENCIES } from '../data/portfolioData';
+import { COMPOUNDING_FREQUENCIES } from '../data/portfolioData';
 import { today, computeInstallmentsDue } from '../data/derive';
 import { validateRdDraft, isValidDraft } from '../data/validation';
 import { GRADIENT_ANGLE } from '../theme/colors';
@@ -16,7 +17,7 @@ import TopAppBar from '../components/TopAppBar';
 import FormField from '../components/FormField';
 import FormSelect from '../components/FormSelect';
 import DateField from '../components/DateField';
-import BankLogo from '../components/BankLogo';
+import BankPicker from '../components/BankPicker';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddEditRD'>;
 
@@ -57,20 +58,17 @@ export default function AddEditRdScreen({ route }: Props) {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title={id ? 'Edit RD' : 'Add RD'} showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconRefresh size={18} color={theme.accent} />} title={id ? 'Edit RD' : 'Add RD'} showBack onBack={actions.back} />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Card style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Basic details</Text>
           <FormField label="RD number" value={String(draft.rdNumber ?? '')} onChangeText={set('rdNumber')} error={errorFor('rdNumber')} />
-          <FormSelect
-            label="Bank"
-            value={draft.bankName ?? ''}
-            options={BANKS}
-            onChange={set('bankName')}
-            placeholder="Select bank"
-            renderOptionIcon={bank => <BankLogo bankName={bank} size={28} />}
-            error={errorFor('bankName')}
-          />
+          <BankPicker
+                      value={draft.bankName ?? ''}
+                      onChange={set('bankName')}
+                      usedNames={[...state.fdList, ...state.rdList].map(record => record.bankName)}
+                      error={errorFor('bankName')}
+                    />
           <FormField label="Branch" value={String(draft.branch ?? '')} onChangeText={set('branch')} />
           <FormField label="Bank account number" value={String(draft.bankAccountNumber ?? '')} onChangeText={set('bankAccountNumber')} keyboardType="number-pad" />
           <FormField label="Customer ID" value={String(draft.customerId ?? '')} onChangeText={set('customerId')} />

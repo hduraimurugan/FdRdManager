@@ -23,38 +23,12 @@ import {
 } from '../data/finance';
 import { ThemeTokens, GradientSpec, TYPE_COLORS } from '../theme/colors';
 import { AppState } from './AppContext';
+import { bankMatches } from '../data/banks';
 
 export type Fill = string | GradientSpec;
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
-}
-
-// ---------------------------------------------------------------------------
-// Bank avatar — static palette, independent of theme (matches the prototype).
-// ---------------------------------------------------------------------------
-const AVATAR_PALETTE: [string, string][] = [
-  ['rgba(111,102,232,0.14)', '#6f66e8'],
-  ['rgba(91,158,224,0.16)', '#4f8fd1'],
-  ['rgba(14,164,114,0.14)', '#0ea472'],
-  ['rgba(226,121,63,0.15)', '#e2793f'],
-  ['rgba(201,134,26,0.15)', '#c9861a'],
-  ['rgba(176,111,214,0.15)', '#b06fd6'],
-];
-
-export function bankAvatar(bankName: string) {
-  let hash = 0;
-  for (let i = 0; i < bankName.length; i++) hash = (hash * 31 + bankName.charCodeAt(i)) >>> 0;
-  const [bg, fg] = AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
-  const initials =
-    bankName
-      .split(' ')
-      .filter(w => w.length > 2 || /^[A-Z]+$/.test(w))
-      .slice(0, 2)
-      .map(w => w[0])
-      .join('')
-      .toUpperCase() || bankName.slice(0, 2).toUpperCase();
-  return { avatarBg: bg, avatarFg: fg, bankInitials: initials };
 }
 
 // ---------------------------------------------------------------------------
@@ -76,6 +50,25 @@ export function statusColors(theme: ThemeTokens, status: string, urgency: Urgenc
 // ---------------------------------------------------------------------------
 // Decorated list items
 // ---------------------------------------------------------------------------
+function maturityDateLabel(status: string, date: string): string {
+  const prefix = status === 'Active' ? 'Matures ' : status === 'Matured' ? 'Matured ' : 'Scheduled maturity ';
+  return prefix + formatDate(date, 'short');
+}
+
+function remainingLabel(status: string, days: number): string {
+  if (status !== 'Active') return status === 'Prematurely Closed' ? 'Prematurely closed' : status;
+  if (days <= 0) return 'Matures today';
+  return `${days} day${days === 1 ? '' : 's'} left`;
+}
+
+export function portfolioMetrics(state: Pick<AppState, 'fdList' | 'rdList'>, kind: 'FD' | 'RD') {
+  const records = kind === 'FD' ? state.fdList : state.rdList;
+  const active = records.filter(record => record.status === 'Active');
+  const invested = active.reduce((sum, record) => sum + ('principalAmount' in record ? record.principalAmount : record.totalDeposited), 0);
+  const maturity = active.reduce((sum, record) => sum + record.maturityAmount, 0);
+  return { activeCount: active.length, invested, maturity, investedFmt: formatINR(invested), maturityFmt: formatINR(maturity) };
+}
+
 export interface DecoratedFD extends FixedDeposit {
   kind: 'FD';
   number: string;
@@ -89,6 +82,7 @@ export interface DecoratedFD extends FixedDeposit {
   maturityLabel: string;
   progressPct: number;
   progressColor: Fill;
+  remainingLabel: string;
 }
 
 export function decorateFD(fd: FixedDeposit, theme: ThemeTokens): DecoratedFD {
@@ -103,7 +97,7 @@ export function decorateFD(fd: FixedDeposit, theme: ThemeTokens): DecoratedFD {
     }
   }
   const sc = statusColors(theme, fd.status, urgency);
-  const pct = clamp((fd.elapsedDays / fd.totalDays) * 100, 0, 100);
+  const pct = fd.totalDays > 0 ? clamp((fd.elapsedDays / fd.totalDays) * 100, 0, 100) : 0;
   return {
     ...fd,
     kind: 'FD',
@@ -115,7 +109,8 @@ export function decorateFD(fd: FixedDeposit, theme: ThemeTokens): DecoratedFD {
     statusFg: sc.fg,
     statusLabel: sc.label,
     progressLabel: fd.status === 'Active' ? Math.round(pct) + '% of tenure' : sc.label,
-    maturityLabel: (fd.status === 'Active' ? 'Matures ' : 'Matured ') + formatDate(fd.maturityDate, 'short'),
+    maturityLabel: maturityDateLabel(fd.status, fd.maturityDate),
+    remainingLabel: remainingLabel(fd.status, dr),
     progressPct: Math.round(pct),
     progressColor: urgency === 'payout' ? theme.orange : urgency === 'maturing' ? theme.warning : fd.status === 'Active' ? theme.gradientAccent : theme.textFaint,
   };
@@ -157,6 +152,7 @@ export interface DecoratedRD extends RecurringDeposit {
   maturityLabel: string;
   progressPct: number;
   progressColor: Fill;
+  remainingLabel: string;
 }
 
 export function decorateRD(rd: RecurringDeposit, theme: ThemeTokens): DecoratedRD {
@@ -167,7 +163,7 @@ export function decorateRD(rd: RecurringDeposit, theme: ThemeTokens): DecoratedR
     else if (dr >= 0 && dr <= 30) urgency = 'maturing';
   }
   const sc = statusColors(theme, rd.status, urgency);
-  const pct = clamp((rd.installmentsPaid / rd.installmentsTotal) * 100, 0, 100);
+  const pct = rd.installmentsTotal > 0 ? clamp((rd.installmentsPaid / rd.installmentsTotal) * 100, 0, 100) : 0;
   return {
     ...rd,
     kind: 'RD',
@@ -179,7 +175,8 @@ export function decorateRD(rd: RecurringDeposit, theme: ThemeTokens): DecoratedR
     statusFg: urgency === 'payout' ? theme.danger : sc.fg,
     statusLabel: urgency === 'payout' ? 'Installment missed' : sc.label,
     progressLabel: rd.installmentsPaid + '/' + rd.installmentsTotal + ' installments',
-    maturityLabel: (rd.status === 'Active' ? 'Matures ' : 'Matured ') + formatDate(rd.maturityDate, 'short'),
+    maturityLabel: maturityDateLabel(rd.status, rd.maturityDate),
+    remainingLabel: remainingLabel(rd.status, dr),
     progressPct: Math.round(pct),
     progressColor: urgency === 'payout' ? theme.danger : urgency === 'maturing' ? theme.warning : rd.status === 'Active' ? theme.gradientAccent : theme.textFaint,
   };
@@ -195,10 +192,10 @@ export function filteredSorted<T extends FixedDeposit | RecurringDeposit>(
 ): T[] {
   let out = list.filter(item => {
     if (state.search) {
-      const q = state.search.toLowerCase();
+      const q = state.search.trim().toLowerCase();
       const holder = kind === 'FD' ? (item as FixedDeposit).fdHolderName : (item as RecurringDeposit).rdHolderName;
       const num = kind === 'FD' ? (item as FixedDeposit).fdNumber : (item as RecurringDeposit).rdNumber;
-      if (!(item.bankName.toLowerCase().includes(q) || num.toLowerCase().includes(q) || (holder || '').toLowerCase().includes(q))) return false;
+      if (!(bankMatches(item.bankName, q) || num.toLowerCase().includes(q) || (holder || '').toLowerCase().includes(q))) return false;
     }
     if (state.filterBank !== 'All' && item.bankName !== state.filterBank) return false;
     const type = kind === 'FD' ? (item as FixedDeposit).fdType : (item as RecurringDeposit).rdType;
@@ -241,6 +238,8 @@ export function homeMetrics(state: AppState) {
     return dt.getMonth() === thisMonth && dt.getFullYear() === thisYear;
   };
   const payoutsThisMonth = state.events.filter(e => (e.type === 'Interest' || e.type === 'Installment Due') && inThisMonth(e.date)).reduce((a, e) => a + e.amount, 0);
+  const interestThisMonth = state.events.filter(e => e.type === 'Interest' && inThisMonth(e.date)).reduce((sum, e) => sum + e.amount, 0);
+  const installmentsThisMonth = state.events.filter(e => e.type === 'Installment Due' && inThisMonth(e.date)).reduce((sum, e) => sum + e.amount, 0);
   const maturitiesThisMonth = state.events.filter(e => e.type === 'Maturity (P+I)' && inThisMonth(e.date)).length;
   const upcomingMaturityCount = [...activeFds, ...activeRds].filter(x => x.daysRemaining >= 0 && x.daysRemaining <= 365).length;
   const activeInvested = activeFds.reduce((sum, f) => sum + f.principalAmount, 0) + activeRds.reduce((sum, r) => sum + r.totalDeposited, 0);
@@ -265,6 +264,8 @@ export function homeMetrics(state: AppState) {
     activeCount: activeFds.length + activeRds.length,
     maturedCount: [...state.fdList, ...state.rdList].filter(x => x.status === 'Matured').length,
     payoutsThisMonthFmt: '₹' + formatCompactINR(payoutsThisMonth),
+    interestThisMonthFmt: formatINR(interestThisMonth),
+    installmentsThisMonthFmt: formatINR(installmentsThisMonth),
     maturitiesThisMonth,
     upcomingMaturityCount,
   };

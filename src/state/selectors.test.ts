@@ -12,6 +12,37 @@ function state(overrides: Partial<AppState> = {}): AppState {
 beforeEach(() => { jest.useFakeTimers(); jest.setSystemTime(NOW); });
 afterEach(() => { jest.useRealTimers(); });
 describe('SEL: portfolio selectors', () => {
+  it('searches Portfolio by bank abbreviation and aliases', () => {
+    const sbi = { ...f, bankName: 'State Bank of India' };
+    expect(s.filteredSorted([sbi], 'FD', state({ search: ' SBI ' }))).toEqual([sbi]);
+    expect(s.filteredSorted([{ ...r, bankName: 'HSBC Bank' }], 'RD', state({ search: 'Shanghai' }))).toHaveLength(1);
+  });
+  it('summarizes active deposits independently of the list filters and monthly RD amounts', () => {
+    const portfolio = state({ fdList: [f, { ...f, id: 'closed', status: 'Closed', principalAmount: 999999 }], search: 'absent' });
+    expect(s.portfolioMetrics(portfolio, 'FD')).toMatchObject({ activeCount: 1, invested: f.principalAmount, maturity: f.maturityAmount });
+    expect(s.portfolioMetrics(portfolio, 'RD')).toMatchObject({ activeCount: 1, invested: r.totalDeposited, maturity: r.maturityAmount });
+    expect(s.portfolioMetrics(state({ rdList: [] }), 'RD')).toMatchObject({ activeCount: 0, invested: 0, maturity: 0 });
+  });
+  it.each(['Closed', 'Prematurely Closed', 'Matured'])('does not show a future countdown for %s FD/RD', status => {
+    for (const item of [s.decorateFD({ ...f, status }, lightTheme), s.decorateRD({ ...r, status }, darkTheme)]) {
+      expect(item.remainingLabel).not.toMatch(/days? left|today/);
+      expect(item.maturityLabel).toMatch(status === 'Matured' ? /^Matured / : /^Scheduled maturity /);
+    }
+  });
+  it('distinguishes tenure progress, installment progress, and maturity today', () => {
+    expect(s.decorateFD({ ...f, daysRemaining: 0 }, lightTheme).remainingLabel).toBe('Matures today');
+    expect(s.decorateFD({ ...f, daysRemaining: 1 }, lightTheme).remainingLabel).toBe('1 day left');
+    expect(s.decorateFD(f, lightTheme).progressLabel).toMatch(/of tenure/);
+    expect(s.decorateRD(r, lightTheme).progressLabel).toBe('6/12 installments');
+    expect(s.decorateFD({ ...f, totalDays: 0 }, lightTheme).progressPct).toBe(0);
+    expect(s.decorateRD({ ...r, installmentsTotal: 0 }, lightTheme).progressPct).toBe(0);
+  });
+  it('keeps monthly incoming interest separate from outgoing RD installments', () => {
+    const event = { id: 'interest', date: '2026-06-20', overdue: false, kind: 'FD' as const, recordId: f.id, number: f.fdNumber, bank: f.bankName, type: 'Interest', amount: 500 };
+    const metrics = s.homeMetrics(state({ events: [event, { ...event, id: 'rd', kind: 'RD', type: 'Installment Due', amount: 5000 }, { ...event, id: 'next', date: '2026-07-20', amount: 1000 }] }));
+    expect(metrics.interestThisMonthFmt).toBe('₹500');
+    expect(metrics.installmentsThisMonthFmt).toBe('₹5,000');
+  });
   it.each(['test bank', 'fd001', 'jane'])('SEL-001 searches bank, number and holder: %s', search => {
     expect(s.filteredSorted([f], 'FD', state({ search }))).toEqual([f]);
   });
@@ -107,7 +138,6 @@ describe('SEL: portfolio selectors', () => {
     expect(s.rdEstimate({}).maturityAmountFmt).toBe('₹0');
   });
   it('SEL-011 avatars are deterministic and notifications retain record links', () => {
-    expect(s.bankAvatar('Test Bank')).toEqual(s.bankAvatar('Test Bank'));
     const notification = deriveNotifications([deriveFd(fd({ startDate: '2025-01-01' }), NOW)], [], NOW)[0];
     expect(s.decorateNotification(notification, lightTheme)).toMatchObject({ recordId: 'fd-1', iconFg: lightTheme.danger });
     expect(s.urgentNotifications(state({ notifications: Array(6).fill(notification) }), lightTheme)).toHaveLength(4);

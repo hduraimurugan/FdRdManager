@@ -1,3 +1,4 @@
+import { IconLock } from '../components/icons/Icons';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
@@ -42,7 +43,7 @@ export default function SecuritySettingsScreen() {
   if (!lockState.pinConfigured) {
     return (
       <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-        <TopAppBar title="Security" showBack onBack={appActions.back} />
+        <TopAppBar titleIcon={<IconLock size={18} color={theme.accent} />} title="Security" showBack onBack={appActions.back} />
         <View style={styles.container}>
           <Card style={styles.introCard}>
             <Text style={[styles.title, { color: theme.text }]}>App lock is off</Text>
@@ -62,7 +63,7 @@ export default function SecuritySettingsScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title="Security" showBack onBack={appActions.back} />
+      <TopAppBar titleIcon={<IconLock size={18} color={theme.accent} />} title="Security" showBack onBack={appActions.back} />
       <View style={styles.container}>
         <Card style={styles.listCard}>
           <View style={[styles.row, { borderBottomColor: theme.divider, borderBottomWidth: 1 }]}>

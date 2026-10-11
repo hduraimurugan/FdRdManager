@@ -8,6 +8,8 @@ import { deriveFd, deriveRd, deriveEvents, deriveNotifications } from '../data/d
 import FormField from '../components/FormField';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FormSelect from '../components/FormSelect';
+import BankPicker from '../components/BankPicker';
+import TopAppBar from '../components/TopAppBar';
 import DateField from '../components/DateField';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { fd, rd, NOW } from '../../tests/support/fixtures';
@@ -76,6 +78,41 @@ describe.each(['light', 'dark'] as const)('UI rendering in %s theme', mode => {
   });
 });
 describe('UI user interactions', () => {
+  it.each(['AddEditFdScreen', 'AddEditRdScreen'])('%s forwards manual bank names to the existing draft field', async name => {
+    mockState.editDraft = name === 'AddEditFdScreen' ? fd() : rd();
+    const tree = await screen(name);
+    const picker = tree.root.findByType(BankPicker);
+    expect(picker.props.usedNames).toContain('Test Bank');
+    await act(async () => picker.props.onChange('Local Cooperative Bank'));
+    expect(mockActions.setDraftField).toHaveBeenCalledWith('bankName', 'Local Cooperative Bank');
+  });
+  it('Portfolio exposes labelled add, clear search, and removable filters', async () => {
+    mockState.search = 'Test'; mockState.filterStatus = 'Active'; mockState.sortBy = 'rate';
+    const tree = await screen('PortfolioScreen');
+    await press(tree, 'Add FD'); expect(mockActions.openAddFD).toHaveBeenCalled();
+    await press(tree, 'Clear'); expect(mockActions.setSearch).toHaveBeenCalledWith('');
+    await press(tree, 'Active ×'); expect(mockActions.setFilterStatus).toHaveBeenCalledWith('All');
+    await press(tree, 'Clear all'); expect(mockActions.resetFilters).toHaveBeenCalled();
+    expect(hasText(tree, 'Rate: highest')).toBe(true);
+    expect(hasText(tree, '1 active FD · All active totals')).toBe(true);
+  });
+  it('Home shortcuts add FD/RD and monthly activity distinguishes money coming in and going out', async () => {
+    const tree = await screen('HomeScreen');
+    await press(tree, 'Add FD'); await press(tree, 'Add RD');
+    expect(mockActions.openAddFD).toHaveBeenCalled(); expect(mockActions.openAddRD).toHaveBeenCalled();
+    expect(hasText(tree, 'Interest payouts · incoming')).toBe(true);
+    expect(hasText(tree, 'RD installments · outgoing')).toBe(true);
+  });
+  it('shows heading icons, Home title, Back and notification actions', async () => {
+    const main = await screen('MainTabsScreen');
+    const header = main.root.findByType(TopAppBar);
+    expect(header.props.title).toBe('Home'); expect(header.props.titleIcon).toBeTruthy();
+    await act(async () => header.props.onBellPress()); expect(mockActions.goNotifications).toHaveBeenCalled();
+    const detail = await screen('FdDetailScreen');
+    const detailHeader = detail.root.findByType(TopAppBar);
+    expect(detailHeader.props.titleIcon).toBeTruthy(); expect(detailHeader.props.showBack).toBe(true);
+    await act(async () => detailHeader.props.onBack()); expect(mockActions.back).toHaveBeenCalled();
+  });
   it.each(['light', 'dark'] as const)('dashboard forecast switches horizons, selects months and opens receipts in %s', async mode => {
     const tree = await screen('HomeScreen', mode);
     expect(hasText(tree, 'Cash flow forecast')).toBe(true);

@@ -48,6 +48,13 @@ beforeEach(() => {
 afterEach(async () => { await cleanup(); expect(listeners.size).toBe(0); jest.clearAllTimers(); jest.useRealTimers(); jest.restoreAllMocks(); });
 
 describe('APP: provider orchestration', () => {
+  it('resets an incompatible type when switching FD/RD while preserving other controls', async () => {
+    await mount();
+    await run(() => { actions.setSearch('SBI'); actions.setFilterBank('Test Bank'); actions.setFilterStatus('Active'); actions.setSortBy('rate'); actions.setFilterType('Tax Saver'); actions.setPortfolioTabRD(); });
+    expect(state).toMatchObject({ portfolioTab: 'RD', filterType: 'All', search: 'SBI', filterBank: 'Test Bank', filterStatus: 'Active', sortBy: 'rate' });
+    await run(() => { actions.setFilterType('Regular'); actions.setPortfolioTabFD(); });
+    expect(state.filterType).toBe('Regular');
+  });
   it('refreshes notification permission after returning from phone settings', async () => {
     jest.mocked(db.getSetting).mockImplementation(async key => key === 'remindersEnabled' ? 'true' : null);
     jest.mocked(notifications.hasNotificationPermission).mockResolvedValueOnce(false).mockResolvedValue(true);

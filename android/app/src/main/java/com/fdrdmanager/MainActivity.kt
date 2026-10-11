@@ -6,6 +6,7 @@ import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
+import com.swmansion.rnscreens.fragment.restoration.RNScreensFragmentFactory
 
 class MainActivity : ReactActivity() {
 
@@ -14,6 +15,9 @@ class MainActivity : ReactActivity() {
   // installSplashScreen() swaps back to AppTheme once the splash is dismissed.
   override fun onCreate(savedInstanceState: Bundle?) {
     installSplashScreen()
+    // React navigation recreates its screens; restored Android screen fragments
+    // otherwise crash after configuration changes (including system font size).
+    supportFragmentManager.fragmentFactory = RNScreensFragmentFactory()
     super.onCreate(savedInstanceState)
   }
 

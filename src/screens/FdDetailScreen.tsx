@@ -12,10 +12,10 @@ import { RootStackParamList } from '../navigation/types';
 import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import TopAppBar from '../components/TopAppBar';
-import BankLogo from '../components/BankLogo';
+import BankBadge from '../components/BankBadge';
 import StatusBadge from '../components/StatusBadge';
 import ProgressBar from '../components/ProgressBar';
-import { IconChevronDown } from '../components/icons/Icons';
+import { IconBank, IconChevronDown } from '../components/icons/Icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FdDetail'>;
 
@@ -31,7 +31,7 @@ export default function FdDetailScreen({ route }: Props) {
   if (!fd) {
     return (
       <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-        <TopAppBar title="FD" showBack onBack={actions.back} />
+        <TopAppBar titleIcon={<IconBank size={18} color={theme.accent} />} title="FD" showBack onBack={actions.back} />
       </View>
     );
   }
@@ -41,7 +41,7 @@ export default function FdDetailScreen({ route }: Props) {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title={fd.fdNumber} showBack onBack={actions.back} />
+      <TopAppBar titleIcon={<IconBank size={18} color={theme.accent} />} title={fd.fdNumber} showBack onBack={actions.back} />
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
@@ -49,7 +49,7 @@ export default function FdDetailScreen({ route }: Props) {
       >
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
-            <BankLogo bankName={fd.bankName} size={44} />
+            <BankBadge bankName={fd.bankName} size={44} />
             <View>
               <Text style={[styles.bankName, { color: theme.text }]}>{fd.bankName}</Text>
               <Text style={[styles.meta, { color: theme.textFaint }]}>
