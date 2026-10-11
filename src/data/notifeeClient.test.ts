@@ -98,6 +98,77 @@ describe('cancelAllReminders', () => {
   });
 });
 
+describe('portfolio notification delivery', () => {
+  function deliveryStore() {
+    let receipts: Record<string, number> = {};
+    return {
+      load: jest.fn(async () => ({ ...receipts })),
+      save: jest.fn(async (next: Record<string, number>) => { receipts = { ...next }; }),
+    };
+  }
+  const alert = { id: `${REMINDER_ID_PREFIX}fd-1-soon`, title: 'Maturity soon', body: 'Bank', fireDate: '2000-01-01', recordId: 'fd-1', kind: 'FD' as const, catchUp: true };
+
+  it('delivers existing attention alerts once across resyncs and restarts', async () => {
+    const store = deliveryStore();
+    await loadClient().syncScheduledReminders([alert], store);
+    expect(mockNotifee().displayNotification).toHaveBeenCalledTimes(1);
+    await loadClient().syncScheduledReminders([alert], store);
+    expect(mockNotifee().displayNotification).toHaveBeenCalledTimes(1);
+    jest.resetModules();
+    await loadClient().syncScheduledReminders([alert], store);
+    expect(mockNotifee().displayNotification).not.toHaveBeenCalled();
+  });
+
+  it('does not replay an alert already scheduled before its due time', async () => {
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(new Date(2026, 5, 1, 8));
+      const client = loadClient();
+      const store = deliveryStore();
+      const scheduled = { ...alert, fireDate: '2026-06-01' };
+      await client.syncScheduledReminders([scheduled], store);
+      jest.setSystemTime(new Date(2026, 5, 1, 10));
+      await client.syncScheduledReminders([scheduled], store);
+      expect(mockNotifee().displayNotification).not.toHaveBeenCalled();
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('keeps the nearest 50 triggers and cancels farther stale triggers', async () => {
+    const client = loadClient();
+    const notifee = mockNotifee();
+    const planned = Array.from({ length: 60 }, (_, i) => ({ ...alert, id: `${REMINDER_ID_PREFIX}${i}`, fireDate: `${2090 + i}-01-01`, catchUp: false })).reverse();
+    notifee.getTriggerNotificationIds.mockResolvedValueOnce([`${REMINDER_ID_PREFIX}59`]);
+    await client.syncScheduledReminders(planned, deliveryStore());
+    expect(notifee.createTriggerNotification).toHaveBeenCalledTimes(50);
+    expect(notifee.createTriggerNotification.mock.calls[0][0].id).toBe(`${REMINDER_ID_PREFIX}0`);
+    expect(notifee.cancelTriggerNotifications).toHaveBeenCalledWith([`${REMINDER_ID_PREFIX}59`]);
+  });
+
+  it('retries failed delivery and recovers the queue after a rejected sync', async () => {
+    const client = loadClient();
+    const store = deliveryStore();
+    mockNotifee().displayNotification.mockRejectedValueOnce(new Error('native failure'));
+    await expect(client.syncScheduledReminders([alert], store)).rejects.toThrow('native failure');
+    await client.syncScheduledReminders([alert], store);
+    expect(mockNotifee().displayNotification).toHaveBeenCalledTimes(2);
+  });
+
+  it('removes receipts for cancelled future events so they can be enabled again', async () => {
+    const client = loadClient();
+    const store = deliveryStore();
+    await client.syncScheduledReminders([{ ...alert, fireDate: '2099-01-01' }], store);
+    await client.syncScheduledReminders([], store);
+    expect(await store.load()).toEqual({});
+  });
+
+  it('serializes simultaneous resyncs to avoid duplicate attention alerts', async () => {
+    const client = loadClient();
+    const store = deliveryStore();
+    await Promise.all([client.syncScheduledReminders([alert], store), client.syncScheduledReminders([alert], store)]);
+    expect(mockNotifee().displayNotification).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('displayCompletionNotification', () => {
   it('ensures its own channel exists, separate from the reminders channel', async () => {
     const client = loadClient();

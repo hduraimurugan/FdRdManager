@@ -72,7 +72,7 @@ The APK is self-signed with this project's own release key (see [Release signing
 - **Payouts** — overdue, due-today, this-week, this-month and upcoming payouts/installments, grouped.
 - **Calculators** — standalone FD (simple vs. compound) and RD calculators, independent of your saved data.
 - **Notifications** & **Maturity timeline** — cross-linked to the relevant FD/RD.
-- **Maturity reminders** — optional local (on-device only) OS notification 1/3/7/14 days before an FD/RD matures.
+- **Notification reminders** — optional on-device OS alerts for maturity, auto-renewal, missed RD installments, and all interest/maturity payouts. Choose an additional maturity reminder 1/3/7/14 days before maturity.
 - **App lock** — optional PIN, with optional biometric unlock as a shortcut; lock-on-background with a configurable grace period.
 - **Backup & Restore** — export to a JSON file (optionally passphrase-encrypted with AES-256-GCM) and restore from one, with a preview of new vs. overwritten records and a choice to skip existing ones.
 - **Delete all data** — a typed-confirmation full wipe (More → Data).
@@ -328,7 +328,11 @@ If an app lock PIN is set, only its PBKDF2-SHA256 hash and a random salt are sto
 
 ## Maturity reminders
 
-Reminders are computed the same "derive, don't store" way as everything else: nothing about a *scheduled notification* is persisted — `src/data/reminders.ts` recomputes which ones should exist right now from your current FD/RD data plus the reminder settings, and `src/state/AppContext.tsx` reconciles that against what's actually scheduled (via `@notifee/react-native`) every time portfolio data changes and every time the app returns to the foreground.
+Enable **More → Notification reminders → Device notifications** and allow notifications in phone settings. This setting covers every attention-card category and all payout dates: maturity at 30 days and the chosen lead time, auto-renewal at 14 days, maturity payouts on the due date, unresolved maturity decisions the following day, interest payouts 3 days before and on the due date, and RD installments on their due date and the following day if still unpaid. Scheduled alerts fire at 9 AM local time and can appear while the app is closed. Existing attention cards are delivered once when enabled; opening after 9 AM also catches up that day's payouts/installments.
+
+`src/data/reminders.ts` derives the schedule from current FD/RD data. `src/state/AppContext.tsx` reconciles it via `@notifee/react-native` after portfolio/preferences changes and on foreground return, including refreshing permission after visiting phone settings. Future interest periods are planned through maturity. The nearest 50 notifications are queued (less if another feature owns pending triggers); reopening replenishes the queue. Large portfolios therefore need the app opened before that queue runs out. This follows [Notifee's timestamp-trigger limits](https://notifee.app/react-native/docs/triggers/).
+
+A device-only delivery receipt in SQLite prevents already delivered attention alerts from repeating on each launch or after dismissal. Receipts are excluded from backup export/import so another device can deliver its own notifications. Dates and amounts are projections from your records; payments must still be updated manually. Disabling reminders or closing/deleting a deposit cancels its pending alerts. No server, Firebase, or network permission is needed.
 
 That foreground resync is also this app's answer to "reschedule after a reboot": there is deliberately no native `BOOT_COMPLETED` receiver (that would need its own permission and native code for a feature reminders can already self-heal). **If the device reboots and you don't reopen the app before a reminder's scheduled time, that reminder won't fire.** Opening the app resyncs everything — true on every cold start and every return to the foreground.
 

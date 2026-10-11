@@ -47,6 +47,14 @@ function sampleFd(overrides: Partial<StoredFd> = {}): StoredFd {
   };
 }
 
+it('keeps device notification delivery receipts out of exported and imported backups', () => {
+  const envelope = buildBackupEnvelope([sampleFd()], [], { remindersEnabled: 'true', notificationDeliveryReceipts: '{"alert":123}' });
+  expect(envelope.settings).toEqual({ remindersEnabled: 'true' });
+  const result = validateBackupJson(JSON.stringify({ ...envelope, settings: { ...envelope.settings, notificationDeliveryReceipts: '{"alert":123}' } }));
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.settings).toEqual({ remindersEnabled: 'true' });
+});
+
 function sampleRd(overrides: Partial<StoredRd> = {}): StoredRd {
   return {
     id: 'rd-1',

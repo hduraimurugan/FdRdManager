@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
@@ -29,18 +29,18 @@ export default function ReminderSettingsScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <TopAppBar title="Maturity Reminders" showBack onBack={actions.back} />
-      <View style={styles.container}>
+      <TopAppBar title="Notification Reminders" showBack onBack={actions.back} />
+      <ScrollView contentContainerStyle={styles.container}>
         <Card style={styles.introCard}>
-          <Text style={[styles.title, { color: theme.text }]}>Get notified before an FD or RD matures</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Get notified about deposits and payouts</Text>
           <Text style={[styles.subtitle, { color: theme.textMuted }]}>
-            A local notification, scheduled on this device only — nothing is sent anywhere.
+            Receive device notifications for maturity, renewal decisions, interest payouts, and RD installments, even when the app is closed. Interest payouts have a 3-day heads-up and a due-day alert; maturity payouts and installments have due-day alerts.
           </Text>
         </Card>
 
         <Card style={styles.listCard}>
           <View style={styles.row}>
-            <Text style={[styles.rowLabel, { color: theme.text }]}>Maturity reminders</Text>
+            <Text style={[styles.rowLabel, { color: theme.text }]}>Device notifications</Text>
             <Switch value={state.remindersEnabled} onValueChange={handleToggle} />
           </View>
         </Card>
@@ -58,7 +58,7 @@ export default function ReminderSettingsScreen() {
 
         {state.remindersEnabled && (
           <View>
-            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Remind me</Text>
+            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Maturity lead time</Text>
             <Card style={styles.listCard}>
               {LEAD_DAYS_OPTIONS.map((days, i) => (
                 <Pressable
@@ -73,7 +73,7 @@ export default function ReminderSettingsScreen() {
             </Card>
           </View>
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 }

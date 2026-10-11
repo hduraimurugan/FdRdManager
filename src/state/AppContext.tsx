@@ -17,7 +17,7 @@ import {
   deleteAllData,
 } from '../data/db';
 import { today, deriveFd, deriveRd, deriveEvents, deriveNotifications } from '../data/derive';
-import { todayIso } from '../data/finance';
+import { todayIso, parseIsoDate } from '../data/finance';
 import { navigate, goBack } from '../navigation/navigationRef';
 import {
   backupFilename,
@@ -30,7 +30,7 @@ import {
 } from '../data/backupSchema';
 import { writeBackupFile, shareBackupFile, deleteBackupFile, pickBackupFileText } from '../data/backupIO';
 import { encryptBackupJson, decryptBackupJson, isEncryptedPayload } from '../data/backupCrypto';
-import { planReminders, DEFAULT_LEAD_DAYS } from '../data/reminders';
+import { planPortfolioReminders, DEFAULT_LEAD_DAYS } from '../data/reminders';
 import {
   syncScheduledReminders,
   cancelAllReminders,
@@ -616,6 +616,19 @@ const THEME_KEY = 'theme';
 const USER_NAME_KEY = 'userName';
 const REMINDERS_ENABLED_KEY = 'remindersEnabled';
 const REMINDER_LEAD_DAYS_KEY = 'reminderLeadDays';
+const NOTIFICATION_RECEIPTS_KEY = 'notificationDeliveryReceipts';
+const reminderDeliveryStore = {
+  load: async (): Promise<Record<string, number>> => {
+    const raw = await getSetting(NOTIFICATION_RECEIPTS_KEY);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1])));
+    } catch { return {}; }
+  },
+  save: (receipts: Record<string, number>) => setSetting(NOTIFICATION_RECEIPTS_KEY, JSON.stringify(receipts)),
+};
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -660,6 +673,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SHOW_TOAST', message });
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => dispatch({ type: 'CLEAR_TOAST' }), 2600);
+  }, []);
+
+  const refreshNotificationPermission = useCallback(async () => {
+    const granted = await hasNotificationPermission();
+    dispatch({ type: 'SET_NOTIFICATION_PERMISSION', granted });
+    return granted;
   }, []);
 
   /** Best-effort system notification for export/import completion — only fires when the
@@ -946,7 +965,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <StateContext.Provider value={state}>
       <ActionsContext.Provider value={actions}>
         {children}
-        <ReminderSync />
+        <ReminderSync refreshPermission={refreshNotificationPermission} />
       </ActionsContext.Provider>
     </StateContext.Provider>
   );
@@ -958,31 +977,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
  * reminders.ts's header comment). Renders nothing; exists purely for the side effect,
  * inside the providers so it can read the same derived fdList/rdList every other
  * consumer sees. */
-function ReminderSync() {
-  const state = useAppState();
+function ReminderSync({ refreshPermission }: { refreshPermission: () => Promise<boolean> }) {
+  const state = useContext(StateContext);
+  const { showToast } = useAppActions();
+
+  const sync = useCallback((permissionGranted: boolean) => {
+    const now = new Date();
+    const fds = state.fdRaw.map(fd => deriveFd(fd, today()));
+    const rds = state.rdRaw.map(rd => deriveRd(rd, today()));
+    const planned = planPortfolioReminders(fds, rds, { enabled: state.remindersEnabled && permissionGranted, leadDays: state.reminderLeadDays }, now);
+    return syncScheduledReminders(planned, reminderDeliveryStore);
+  }, [state.fdRaw, state.rdRaw, state.remindersEnabled, state.reminderLeadDays]);
 
   useEffect(() => {
     if (!state.hydrated) return;
-    const planned = planReminders(state.fdList, state.rdList, { enabled: state.remindersEnabled, leadDays: state.reminderLeadDays }, today());
-    syncScheduledReminders(planned).catch(() => {});
-  }, [state.hydrated, state.remindersEnabled, state.reminderLeadDays, state.fdList, state.rdList]);
+    sync(state.notificationPermissionGranted).catch(() => showToast('Could not schedule notifications — reopen the app to retry'));
+  }, [state.hydrated, state.notificationPermissionGranted, sync, showToast]);
 
   useEffect(() => {
     const sub = RNAppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next !== 'active' || !state.hydrated || !state.remindersEnabled) return;
-      const planned = planReminders(state.fdList, state.rdList, { enabled: state.remindersEnabled, leadDays: state.reminderLeadDays }, today());
-      syncScheduledReminders(planned).catch(() => {});
+      if (next !== 'active' || !state.hydrated) return;
+      refreshPermission().then(sync).catch(() => showToast('Could not schedule notifications — reopen the app to retry'));
     });
     return () => sub.remove();
-  }, [state.hydrated, state.remindersEnabled, state.reminderLeadDays, state.fdList, state.rdList]);
+  }, [state.hydrated, refreshPermission, sync, showToast]);
 
   return null;
 }
 
 export function useAppState(): AppState {
   const raw = useContext(StateContext);
-  const fdList = useMemo(() => raw.fdRaw.map(f => deriveFd(f, today())), [raw.fdRaw]);
-  const rdList = useMemo(() => raw.rdRaw.map(r => deriveRd(r, today())), [raw.rdRaw]);
+  const day = todayIso();
+  const fdList = useMemo(() => raw.fdRaw.map(f => deriveFd(f, parseIsoDate(day))), [raw.fdRaw, day]);
+  const rdList = useMemo(() => raw.rdRaw.map(r => deriveRd(r, parseIsoDate(day))), [raw.rdRaw, day]);
   const events = useMemo(() => deriveEvents(fdList, rdList), [fdList, rdList]);
   const notifications = useMemo(() => deriveNotifications(fdList, rdList, today()), [fdList, rdList]);
   return { ...raw, fdList, rdList, events, notifications };

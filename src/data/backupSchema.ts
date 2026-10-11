@@ -28,7 +28,7 @@ export function buildBackupEnvelope(fds: StoredFd[], rds: StoredRd[], settings: 
     exportedAt: new Date().toISOString(),
     fixedDeposits: fds,
     recurringDeposits: rds,
-    settings,
+    settings: Object.fromEntries(Object.entries(settings).filter(([key]) => key !== 'notificationDeliveryReceipts')),
   };
 }
 
@@ -155,7 +155,7 @@ export function validateBackupJson(raw: string): ValidateBackupResult {
   const settingsRaw = isRecord(parsed.settings) ? parsed.settings : {};
   const settings: Record<string, string> = {};
   for (const [key, value] of Object.entries(settingsRaw)) {
-    if (typeof value === 'string') settings[key] = value;
+    if (key !== 'notificationDeliveryReceipts' && typeof value === 'string') settings[key] = value;
   }
 
   return { ok: true, fds, rds, settings, skippedCount };

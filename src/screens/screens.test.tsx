@@ -27,7 +27,7 @@ const registry = [
   ['FdDetailScreen', 'FD001'], ['RdDetailScreen', 'RD001'], ['AddEditFdScreen', 'Add FD'], ['AddEditRdScreen', 'Add RD'],
   ['FdCalculatorScreen', 'FD Calculator'], ['RdCalculatorScreen', 'RD Calculator'], ['NotificationsScreen', 'Notifications'],
   ['MaturityTimelineScreen', 'Maturity Timeline'], ['BackupRestoreScreen', 'Backup & Restore'], ['ClearDataScreen', 'Delete all data'],
-  ['SecuritySettingsScreen', 'Security'], ['PinSetupScreen', 'Set up PIN'], ['ReminderSettingsScreen', 'Maturity Reminders'], ['LockScreen', 'Enter your PIN'],
+  ['SecuritySettingsScreen', 'Security'], ['PinSetupScreen', 'Set up PIN'], ['ReminderSettingsScreen', 'Notification Reminders'], ['LockScreen', 'Enter your PIN'],
 ];
 beforeEach(() => {
   jest.useFakeTimers(); jest.setSystemTime(NOW); jest.clearAllMocks(); jest.replaceProperty(Platform, 'OS', 'android');

@@ -16,7 +16,8 @@
 // This is a real, documented limitation, not an oversight — see the README.
 
 import { FixedDeposit, RecurringDeposit, formatINR } from './portfolioData';
-import { addDays, parseIsoDate } from './finance';
+import { addDays, addMonthsClamped, parseIsoDate, payoutSchedule, payoutPerPeriod, toIsoDate } from './finance';
+import { deriveNotifications } from './derive';
 
 export const REMINDER_ID_PREFIX = 'maturity-reminder-';
 export const LEAD_DAYS_OPTIONS = [1, 3, 7, 14] as const;
@@ -37,6 +38,8 @@ export interface PlannedReminder {
   fireDate: string;
   recordId: string;
   kind: 'FD' | 'RD';
+  /** Deliver an existing in-app alert once when its scheduled time has passed. */
+  catchUp?: boolean;
 }
 
 function fdReminder(fd: FixedDeposit, leadDays: number): PlannedReminder | null {
@@ -75,4 +78,59 @@ export function planReminders(fds: FixedDeposit[], rds: RecurringDeposit[], sett
   const rdReminders = rds.map(rd => rdReminder(rd, settings.leadDays)).filter((r): r is PlannedReminder => r !== null);
 
   return [...fdReminders, ...rdReminders].filter(r => parseIsoDate(r.fireDate) >= today);
+}
+
+/** All attention alerts plus every payout/installment date, including later interest
+ * periods (not just the next payout shown in the UI). The OS queue keeps the nearest
+ * events; reopening the app replenishes it. */
+export function planPortfolioReminders(fds: FixedDeposit[], rds: RecurringDeposit[], settings: ReminderSettings, now: Date): PlannedReminder[] {
+  if (!settings.enabled) return [];
+  const planned = new Map<string, PlannedReminder>();
+  const add = (kind: 'FD' | 'RD', recordId: string, category: string, eventDate: string, fireDate: string, title: string, body: string, catchUp = false) => {
+    const id = `${REMINDER_ID_PREFIX}${kind.toLowerCase()}-${recordId}-${category}-${eventDate}`;
+    if (catchUp || parseIsoDate(fireDate) >= parseIsoDate(now)) {
+      planned.set(id, { id, kind, recordId, fireDate, title, body, catchUp: catchUp || (fireDate === toIsoDate(now) && ['interest-payout', 'maturity-payout', 'installment'].includes(category)) });
+    }
+  };
+  for (const reminder of planReminders(fds, rds, settings, now)) planned.set(reminder.id, { ...reminder, catchUp: reminder.fireDate === toIsoDate(now) });
+
+  for (const record of [...fds, ...rds]) {
+    const kind = 'fdNumber' in record ? 'FD' : 'RD';
+    const number = 'fdNumber' in record ? record.fdNumber : record.rdNumber;
+    if (record.status !== 'Active') continue;
+    const body = `${record.bankName} · ${formatINR(record.maturityAmount)}`;
+    add(kind, record.id, 'soon', record.maturityDate, addDays(record.maturityDate, -30), `${number} matures in 30 days`, body);
+    add(kind, record.id, 'maturity-payout', record.maturityDate, record.maturityDate, `${number} maturity payout due today`, body);
+    add(kind, record.id, 'action', record.maturityDate, addDays(record.maturityDate, 1), `${number} matured — action needed`, `${record.bankName} · ${kind === 'FD' ? 'Renewal decision pending' : 'Awaiting payout'}`);
+    if ('fdNumber' in record) {
+      if (record.autoRenewal === 'Yes') {
+        add(kind, record.id, 'autorenew', record.maturityDate, addDays(record.maturityDate, -14), `${number} auto-renewal pending`, `${record.bankName} · Confirm before maturity`);
+      }
+      if (record.isPayoutFD) {
+        for (const date of payoutSchedule(record.startDate, record.interestPayoutMode, record.maturityDate)) {
+          const interestBody = `${record.bankName} · ${formatINR(payoutPerPeriod(record.principalAmount, record.interestRate, record.interestPayoutMode))} · ${date}`;
+          add(kind, record.id, 'interest-alert', date, addDays(date, -3), `${number} interest payout due in 3 days`, interestBody);
+          add(kind, record.id, 'interest-payout', date, date, `${number} interest payout due today`, interestBody);
+        }
+      }
+    } else {
+      for (let i = record.installmentsPaid; i < record.installmentsTotal; i++) {
+        const date = toIsoDate(addMonthsClamped(parseIsoDate(record.startDate), i));
+        add(kind, record.id, 'installment', date, date, `${number} installment due today`, `${record.bankName} · ${formatINR(record.monthlyInstallment)}`);
+        add(kind, record.id, 'missed', date, addDays(date, 1), `${number} has an unpaid installment`, `${record.bankName} · Pay to avoid penalty`);
+      }
+    }
+  }
+
+  // Existing attention cards also appear in the notification tray when enabled.
+  // IDs match their future milestones so foreground sync cannot replay a delivered alert.
+  for (const notification of deriveNotifications(fds, rds, now)) {
+    const category = notification.icon === 'refresh' ? 'autorenew'
+      : notification.icon === 'wallet' ? 'interest-alert'
+      : notification.id.endsWith('-missed') ? 'missed'
+      : notification.icon === 'alert' ? 'action' : 'soon';
+    const offset = category === 'soon' ? -30 : category === 'autorenew' ? -14 : category === 'interest-alert' ? -3 : 1;
+    add(notification.recordType, notification.recordId, category, notification.date, addDays(notification.date, offset), notification.title, notification.subtitle, true);
+  }
+  return [...planned.values()].sort((a, b) => a.fireDate.localeCompare(b.fireDate) || a.id.localeCompare(b.id));
 }

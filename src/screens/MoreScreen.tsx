@@ -93,7 +93,7 @@ export default function MoreScreen() {
           <View style={[styles.rowIcon, { backgroundColor: 'rgba(201,134,26,0.15)' }]}>
             <IconClock size={16} color={theme.warning} />
           </View>
-          <Text style={[styles.rowLabel, { color: theme.text }]}>Maturity reminders</Text>
+          <Text style={[styles.rowLabel, { color: theme.text }]}>Notification reminders</Text>
           <IconChevronRight size={15} color={theme.textFaint} />
         </Pressable>
         <Pressable onPress={actions.goBackupRestore} style={[styles.row, { borderBottomColor: theme.divider, borderBottomWidth: 1 }]}>

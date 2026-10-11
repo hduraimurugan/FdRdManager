@@ -1,5 +1,5 @@
 import { FixedDeposit, RecurringDeposit } from './portfolioData';
-import { planReminders, REMINDER_ID_PREFIX } from './reminders';
+import { planReminders, planPortfolioReminders, REMINDER_ID_PREFIX } from './reminders';
 
 function sampleFd(overrides: Partial<FixedDeposit> = {}): FixedDeposit {
   return {
@@ -31,6 +31,45 @@ function sampleRd(overrides: Partial<RecurringDeposit> = {}): RecurringDeposit {
 
 const settings = { enabled: true, leadDays: 3 };
 const now = new Date(2026, 5, 1); // 2026-06-01, well before either sample's maturity
+
+describe('planPortfolioReminders', () => {
+  it('keeps every notification disabled when the master setting is off', () => {
+    expect(planPortfolioReminders([sampleFd()], [sampleRd()], { enabled: false, leadDays: 3 }, now)).toEqual([]);
+  });
+
+  it('plans later interest periods as well as FD/RD maturity payouts', () => {
+    const planned = planPortfolioReminders([sampleFd({ isPayoutFD: true, interestPayoutMode: 'Monthly' })], [sampleRd()], settings, now);
+    expect(planned).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'FD001 interest payout due today', fireDate: '2026-06-01', catchUp: true }),
+      expect.objectContaining({ title: 'FD001 interest payout due today', fireDate: '2026-07-01' }),
+      expect.objectContaining({ title: 'FD001 interest payout due in 3 days', fireDate: '2026-06-28' }),
+      expect.objectContaining({ title: 'FD001 maturity payout due today', fireDate: '2027-01-01' }),
+      expect.objectContaining({ title: 'RD001 maturity payout due today', fireDate: '2027-01-01' }),
+    ]));
+    expect(new Set(planned.map(r => r.id)).size).toBe(planned.length);
+  });
+
+  it('mirrors current maturity and auto-renewal attention cards with stable IDs', () => {
+    const fd = sampleFd({ maturityDate: '2026-06-12', daysRemaining: 11, autoRenewal: 'Yes' });
+    const planned = planPortfolioReminders([fd], [], settings, now);
+    expect(planned).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'FD001 matures in 11 days', catchUp: true }),
+      expect.objectContaining({ title: 'FD001 auto-renewal pending', catchUp: true }),
+    ]));
+    const tomorrow = planPortfolioReminders([{ ...fd, daysRemaining: 10 }], [], settings, new Date(2026, 5, 2));
+    expect(tomorrow.find(r => r.title === 'FD001 matures in 10 days')?.id).toBe(planned.find(r => r.title === 'FD001 matures in 11 days')?.id);
+  });
+
+  it('includes matured and missed-installment alerts but excludes closed records', () => {
+    const planned = planPortfolioReminders([sampleFd({ status: 'Matured' }), sampleFd({ id: 'closed', status: 'Closed' })], [sampleRd({ installmentsMissed: 2, nextInstallmentDate: '2026-04-01' })], settings, now);
+    expect(planned).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'FD001 matured — action needed', catchUp: true }),
+      expect.objectContaining({ title: 'RD001 has 2 missed installments', catchUp: true }),
+      expect.objectContaining({ title: 'RD001 installment due today', fireDate: '2026-07-01' }),
+    ]));
+    expect(planned.some(r => r.recordId === 'closed')).toBe(false);
+  });
+});
 
 describe('planReminders', () => {
   it('returns nothing when reminders are disabled, regardless of the portfolio', () => {

@@ -48,6 +48,19 @@ beforeEach(() => {
 afterEach(async () => { await cleanup(); expect(listeners.size).toBe(0); jest.clearAllTimers(); jest.useRealTimers(); jest.restoreAllMocks(); });
 
 describe('APP: provider orchestration', () => {
+  it('refreshes notification permission after returning from phone settings', async () => {
+    jest.mocked(db.getSetting).mockImplementation(async key => key === 'remindersEnabled' ? 'true' : null);
+    jest.mocked(notifications.hasNotificationPermission).mockResolvedValueOnce(false).mockResolvedValue(true);
+    await mount();
+    expect(state.notificationPermissionGranted).toBe(false);
+    expect(notifications.syncScheduledReminders).toHaveBeenLastCalledWith([], expect.any(Object));
+    await run(() => listeners.forEach(listener => listener('active')));
+    expect(state.notificationPermissionGranted).toBe(true);
+    expect(notifications.syncScheduledReminders).toHaveBeenLastCalledWith(expect.arrayContaining([
+      expect.objectContaining({ title: 'FD001 maturity payout due today' }),
+      expect.objectContaining({ title: 'RD001 maturity payout due today' }),
+    ]), expect.any(Object));
+  });
   it('APP-001 hydrates records and persisted preferences', async () => {
     jest.mocked(db.getSetting).mockImplementation(async key => ({ theme: 'dark', userName: 'Jane', remindersEnabled: 'true', reminderLeadDays: '7' }[key] ?? null));
     await mount();
