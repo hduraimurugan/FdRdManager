@@ -53,6 +53,22 @@ describe('DER: derived records', () => {
     expect(computeInstallmentsDue('2026-07-01', 12, NOW)).toBe(0);
     expect(deriveRd(rd({ startDate: '2026-07-01', installmentsPaid: 0 }), NOW).installmentsMissed).toBe(0);
   });
+  it.each([
+    [new Date(2026, 5, 30, 23, 59, 59, 999), 0],
+    [new Date(2026, 6, 1), 1],
+    [new Date(2026, 6, 1, 12), 1],
+    [new Date(2026, 6, 31, 23, 59), 1],
+    [new Date(2026, 7, 1), 2],
+  ] as const)('BUG-001 as of %s has %i installments due at the start boundary', (now, expected) => {
+    expect(computeInstallmentsDue('2026-07-01', 12, now)).toBe(expected);
+  });
+  it('BUG-001 future RD has no missed-installment alert across a year boundary', () => {
+    const record = deriveRd(rd({ startDate: '2027-01-31', installmentsPaid: 0 }), NOW);
+    expect(computeInstallmentsDue('2027-01-31', 12, NOW)).toBe(0);
+    expect(record.installmentsMissed).toBe(0);
+    expect(deriveNotifications([], [record], NOW)).toEqual([]);
+    expect(computeInstallmentsDue('2026-07-01', 0, new Date(2026, 6, 1))).toBe(0);
+  });
   it('BUG-002 month-end RD installment is due on its clamped date', () => {
     expect(computeInstallmentsDue('2026-01-31', 12, new Date(2026, 1, 28))).toBe(2);
   });

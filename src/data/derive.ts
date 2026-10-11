@@ -118,7 +118,9 @@ function monthsElapsed(start: Date, now: Date): number {
 
 /** How many monthly installments are due as of `now` for an RD starting on `startDate`. */
 export function computeInstallmentsDue(startDate: string, totalMonths: number, now: Date): number {
-  return clamp(monthsElapsed(parseIsoDate(startDate), now) + 1, 0, Math.max(0, totalMonths));
+  const start = parseIsoDate(startDate);
+  if (now < start) return 0;
+  return clamp(monthsElapsed(start, now) + 1, 0, Math.max(0, totalMonths));
 }
 
 export function deriveRd(stored: StoredRd, now: Date): RecurringDeposit {
