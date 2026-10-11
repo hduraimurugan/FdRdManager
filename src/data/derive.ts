@@ -111,7 +111,8 @@ export function deriveFd(stored: StoredFd, now: Date): FixedDeposit {
 // ---------------------------------------------------------------------------
 function monthsElapsed(start: Date, now: Date): number {
   let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
-  if (now.getDate() < start.getDate()) months -= 1;
+  // Compare with this month's scheduled date, clamped from the original start.
+  if (now < addMonthsClamped(start, months)) months -= 1;
   return Math.max(0, months);
 }
 

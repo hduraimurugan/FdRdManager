@@ -1,6 +1,6 @@
 # Bug Report
 
-Snapshot: 2026-10-11. Status: **BUG-003, BUG-004, BUG-005, BUG-006, BUG-007 and BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
+Snapshot: 2026-10-11. Status: **BUG-002 through BUG-008 fixed; BUG-001 deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
 
 Severity: High = data reliability/security/business outcome; Medium = incorrect validation, schedule or blocked workflow. These are review priorities, not proof of exploitation.
 
@@ -9,7 +9,7 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 | ID | Severity | Title | Status |
 |---|---|---|---|
 | BUG-001 | Medium | Future RD incorrectly has an installment due | Confirmed; failing regression; fix deferred |
-| BUG-002 | Medium | Month-end RD installment count lags its clamped schedule | Confirmed; failing regression; fix deferred |
+| BUG-002 | Medium | Month-end RD installment count lags its clamped schedule | Fixed; regression passing |
 | BUG-003 | High | Portfolio values remain stale after foreground return | Fixed; regression passing |
 | BUG-004 | High | Failed save leaves an unpersisted deposit visible | Fixed; regression passing |
 | BUG-005 | High | Inactive-to-background transition restarts lock grace timer | Fixed; regression passing |
@@ -29,12 +29,14 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 
 ## BUG-002: Month-end RD installment count lags its clamped schedule
 
-- Severity: **Medium**. Status: open, fix deferred.
+- Severity: **Medium**. Status: fixed on 2026-10-11.
 - Source: [src/data/derive.ts](../../src/data/derive.ts), line 112 (`function monthsElapsed`).
 - Executable regression: [src/data/derive.test.ts](../../src/data/derive.test.ts); filter with `npm test -- --runInBand --testNamePattern=BUG-002`.
 - Preconditions and steps: Create a 12-month RD starting 31 January 2026. Calculate installments due on 28 February 2026.
 - Expected: 2 installments due: 31 January and the clamped 28 February date.
-- Actual/evidence: Only 1 installment due.
+- Original actual/evidence: Only 1 installment due.
+- Fix: Elapsed-month counting compares today's date with the installment date clamped from the original start date. Short months count on their final day; later months retain the original day rather than drifting earlier.
+- Verification: All 12 BUG-002 regressions pass, covering non-leap/leap February, 29th/30th/31st starts, 30-day months, year transitions, date boundaries, tenure caps and missed-installment alerts. The derive/finance run has 62 passing tests and only the existing BUG-001 failure. Targeted ESLint and TypeScript checks pass.
 - Reproduction layer: Jest unit/provider/renderer test; native device reproduction pending.
 
 ## BUG-003: Portfolio values remain stale after foreground return
@@ -126,5 +128,5 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 - Reminders may not fire after reboot unless the app is reopened to resynchronize.
 - The SQLite database is not encrypted at rest; app lock protects the UI.
 
-BUG-003 foreground portfolio refresh, BUG-004 save persistence, BUG-005 lock grace timing, BUG-006 renewal start date, BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
+BUG-002 month-end installment counting, BUG-003 foreground portfolio refresh, BUG-004 save persistence, BUG-005 lock grace timing, BUG-006 renewal start date, BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. BUG-001 remains deferred; no migrations or expectation changes to conceal failures were made.
 

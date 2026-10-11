@@ -56,4 +56,28 @@ describe('DER: derived records', () => {
   it('BUG-002 month-end RD installment is due on its clamped date', () => {
     expect(computeInstallmentsDue('2026-01-31', 12, new Date(2026, 1, 28))).toBe(2);
   });
+  it.each([
+    ['2026-01-31', new Date(2026, 1, 27, 23, 59), 1],
+    ['2026-01-31', new Date(2026, 2, 30), 2],
+    ['2026-01-31', new Date(2026, 2, 31), 3],
+    ['2026-01-31', new Date(2026, 3, 29), 3],
+    ['2026-01-31', new Date(2026, 3, 30), 4],
+    ['2024-01-31', new Date(2024, 1, 28), 1],
+    ['2024-01-31', new Date(2024, 1, 29), 2],
+    ['2026-01-30', new Date(2026, 1, 28), 2],
+    ['2026-01-29', new Date(2026, 1, 28), 2],
+    ['2025-12-31', new Date(2026, 1, 28), 3],
+  ] as const)('BUG-002 start %s as of %s has %i installments due', (start, now, expected) => {
+    expect(computeInstallmentsDue(start, 12, now)).toBe(expected);
+  });
+  it('BUG-002 clamped due date updates missed installments and alerts', () => {
+    const now = new Date(2026, 1, 28);
+    const record = deriveRd(rd({ startDate: '2026-01-31', installmentsPaid: 1 }), now);
+    expect(record.installmentsMissed).toBe(1);
+    expect(record.nextInstallmentDate).toBe('2026-02-28');
+    expect(deriveNotifications([], [record], now)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ recordId: 'rd-1', severity: 'high' }),
+    ]));
+    expect(computeInstallmentsDue('2026-01-31', 2, new Date(2026, 3, 30))).toBe(2);
+  });
 });
