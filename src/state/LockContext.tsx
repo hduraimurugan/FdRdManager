@@ -155,12 +155,13 @@ export function LockProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onChange = (next: AppStateStatus) => {
       if (next === 'background' || next === 'inactive') {
-        backgroundedAtRef.current = Date.now();
+        // Inactive and background belong to the same time away from the foreground.
+        if (backgroundedAtRef.current === null) backgroundedAtRef.current = Date.now();
       } else if (next === 'active') {
         const { lockEnabled, pinConfigured, status, graceSeconds } = stateRef.current;
-        if (!lockEnabled || !pinConfigured || status === 'checking') return;
         const backgroundedAt = backgroundedAtRef.current;
         backgroundedAtRef.current = null;
+        if (!lockEnabled || !pinConfigured || status === 'checking') return;
         if (backgroundedAt === null) return;
         const elapsedSeconds = (Date.now() - backgroundedAt) / 1000;
         if (elapsedSeconds >= graceSeconds) {

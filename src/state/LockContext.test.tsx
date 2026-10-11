@@ -99,10 +99,24 @@ describe('LOCK: security provider', () => {
     jest.mocked(db.setSetting).mockRejectedValueOnce(new Error('disk full'));
     await run(async () => { await expect(actions.setupPin('1234')).rejects.toThrow('disk full'); });
   });
-  it('BUG-005 inactive then background must preserve the original grace-period start', async () => {
+  it.each([9999, 10000, 15000])('BUG-005 inactive then background preserves the grace-period start with %i ms more away', async elapsed => {
     await mount({ lockEnabled: 'true', lockGraceSeconds: '30' }); await run(() => actions.unlockWithPin('1234'));
     await run(() => listeners.forEach(listener => listener('inactive'))); await run(() => jest.advanceTimersByTime(20000));
-    await run(() => listeners.forEach(listener => listener('background'))); await run(() => jest.advanceTimersByTime(15000));
-    await run(() => listeners.forEach(listener => listener('active'))); expect(state.status).toBe('locked');
+    await run(() => listeners.forEach(listener => listener('background'))); await run(() => jest.advanceTimersByTime(5000));
+    await run(() => listeners.forEach(listener => listener('background'))); await run(() => jest.advanceTimersByTime(elapsed - 5000));
+    await run(() => listeners.forEach(listener => listener('active'))); expect(state.status).toBe(elapsed < 10000 ? 'unlocked' : 'locked');
+  });
+  it('BUG-005 each foreground return resets the next grace period', async () => {
+    await mount({ lockEnabled: 'true', lockGraceSeconds: '30' }); await run(() => actions.unlockWithPin('1234'));
+    for (let i = 0; i < 2; i++) {
+      await run(() => listeners.forEach(listener => listener('inactive')));
+      await run(() => jest.advanceTimersByTime(20000));
+      await run(() => listeners.forEach(listener => listener('active')));
+      expect(state.status).toBe('unlocked');
+    }
+    await run(() => listeners.forEach(listener => listener('background')));
+    await run(() => jest.advanceTimersByTime(30000));
+    await run(() => listeners.forEach(listener => listener('active')));
+    expect(state.status).toBe('locked');
   });
 });

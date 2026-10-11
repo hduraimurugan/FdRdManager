@@ -1,6 +1,6 @@
 # Bug Report
 
-Snapshot: 2026-10-11. Status: **BUG-006, BUG-007 and BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
+Snapshot: 2026-10-11. Status: **BUG-005, BUG-006, BUG-007 and BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
 
 Severity: High = data reliability/security/business outcome; Medium = incorrect validation, schedule or blocked workflow. These are review priorities, not proof of exploitation.
 
@@ -12,7 +12,7 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 | BUG-002 | Medium | Month-end RD installment count lags its clamped schedule | Confirmed; failing regression; fix deferred |
 | BUG-003 | High | Portfolio values remain stale after foreground return | Confirmed; failing regression; fix deferred |
 | BUG-004 | High | Failed save leaves an unpersisted deposit visible | Confirmed; failing regression; fix deferred |
-| BUG-005 | High | Inactive-to-background transition restarts lock grace timer | Confirmed; failing regression; fix deferred |
+| BUG-005 | High | Inactive-to-background transition restarts lock grace timer | Fixed; regression passing |
 | BUG-006 | High | FD renewal starts today instead of the promised maturity date | Fixed; regression passing |
 | BUG-007 | Medium | Matured FD has no renewal action | Fixed; regression passing |
 | BUG-008 | Medium | Overflowing amount passes form validation | Fixed; regression passing |
@@ -59,12 +59,14 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 
 ## BUG-005: Inactive-to-background transition restarts lock grace timer
 
-- Severity: **High**. Status: open, fix deferred.
+- Severity: **High**. Status: fixed on 2026-10-11.
 - Source: [src/state/LockContext.tsx](../../src/state/LockContext.tsx), line 157 (`if (next === 'background' || next === 'inactive')`).
 - Executable regression: [src/state/LockContext.test.tsx](../../src/state/LockContext.test.tsx); filter with `npm test -- --runInBand --testNamePattern=BUG-005`.
 - Preconditions and steps: Unlock with 30-second grace. Emit inactive, wait 20 seconds, emit background, wait 15 seconds, then emit active.
 - Expected: Lock after 35 seconds away from the foreground.
-- Actual/evidence: Remains unlocked because only 15 seconds since background are counted.
+- Original actual/evidence: Remained unlocked because only 15 seconds since background were counted.
+- Fix: Record the first inactive/background timestamp and preserve it through subsequent non-foreground transitions. Clear the timestamp on every active return so each later absence gets its own grace period.
+- Verification: All 16 lock-provider tests pass, including the original 35-second scenario, repeated background events, the 30-second boundary and separate foreground/absence cycles. Targeted ESLint passes.
 - Reproduction layer: Jest unit/provider/renderer test; native device reproduction pending.
 
 ## BUG-006: FD renewal starts today instead of the promised maturity date
@@ -119,5 +121,5 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 - Reminders may not fire after reboot unless the app is reopened to resynchronize.
 - The SQLite database is not encrypted at rest; app lock protects the UI.
 
-BUG-006 renewal start date, BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
+BUG-005 lock grace timing, BUG-006 renewal start date, BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
 
