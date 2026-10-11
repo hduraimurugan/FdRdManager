@@ -591,8 +591,8 @@ export interface AppActions {
   openEditFD: (id: string) => void;
   openEditRD: (id: string) => void;
   setDraftField: (field: string, value: any) => void;
-  saveDraftFD: (id: string | null) => void;
-  saveDraftRD: (id: string | null) => void;
+  saveDraftFD: (id: string | null) => Promise<void>;
+  saveDraftRD: (id: string | null) => Promise<void>;
   openFdCalculator: () => void;
   openRdCalculator: () => void;
   toggleFdPayout: () => void;
@@ -836,21 +836,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       navigate('AddEditRD', { id });
     },
     setDraftField: (field, value) => dispatch({ type: 'SET_DRAFT_FIELD', field, value }),
-    saveDraftFD: id => {
+    saveDraftFD: async id => {
       const draft = stateRef.current.editDraft;
       if (!draft) return;
       const record = draftToStoredFd(draft, id || 'fd-' + Date.now());
+      try {
+        await upsertFd(record);
+      } catch {
+        showToast('Failed to save — try again');
+        return;
+      }
       dispatch({ type: 'SAVE_FD', record, isNew: !id });
-      upsertFd(record).catch(() => showToast('Failed to save — try again'));
       goBack();
       showToast(id ? 'FD updated successfully' : 'FD added successfully');
     },
-    saveDraftRD: id => {
+    saveDraftRD: async id => {
       const draft = stateRef.current.editDraft;
       if (!draft) return;
       const record = draftToStoredRd(draft, id || 'rd-' + Date.now());
+      try {
+        await upsertRd(record);
+      } catch {
+        showToast('Failed to save — try again');
+        return;
+      }
       dispatch({ type: 'SAVE_RD', record, isNew: !id });
-      upsertRd(record).catch(() => showToast('Failed to save — try again'));
       goBack();
       showToast(id ? 'RD updated successfully' : 'RD added successfully');
     },

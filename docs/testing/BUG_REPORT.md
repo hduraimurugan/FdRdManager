@@ -1,6 +1,6 @@
 # Bug Report
 
-Snapshot: 2026-10-11. Status: **BUG-005, BUG-006, BUG-007 and BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
+Snapshot: 2026-10-11. Status: **BUG-004, BUG-005, BUG-006, BUG-007 and BUG-008 fixed; other fixes deferred**. Original findings were reproduced by automated tests against unmodified application source, not by native device execution.
 
 Severity: High = data reliability/security/business outcome; Medium = incorrect validation, schedule or blocked workflow. These are review priorities, not proof of exploitation.
 
@@ -11,7 +11,7 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 | BUG-001 | Medium | Future RD incorrectly has an installment due | Confirmed; failing regression; fix deferred |
 | BUG-002 | Medium | Month-end RD installment count lags its clamped schedule | Confirmed; failing regression; fix deferred |
 | BUG-003 | High | Portfolio values remain stale after foreground return | Confirmed; failing regression; fix deferred |
-| BUG-004 | High | Failed save leaves an unpersisted deposit visible | Confirmed; failing regression; fix deferred |
+| BUG-004 | High | Failed save leaves an unpersisted deposit visible | Fixed; regression passing |
 | BUG-005 | High | Inactive-to-background transition restarts lock grace timer | Fixed; regression passing |
 | BUG-006 | High | FD renewal starts today instead of the promised maturity date | Fixed; regression passing |
 | BUG-007 | Medium | Matured FD has no renewal action | Fixed; regression passing |
@@ -49,12 +49,14 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 
 ## BUG-004: Failed save leaves an unpersisted deposit visible
 
-- Severity: **High**. Status: open, fix deferred.
-- Source: [src/state/AppContext.tsx](../../src/state/AppContext.tsx), line 820 (`saveDraftFD: id =>`).
+- Severity: **High**. Status: fixed on 2026-10-11.
+- Source: [src/state/AppContext.tsx](../../src/state/AppContext.tsx), `saveDraftFD` and `saveDraftRD`.
 - Executable regression: [src/state/AppContext.test.tsx](../../src/state/AppContext.test.tsx); filter with `npm test -- --runInBand --testNamePattern=BUG-004`.
 - Preconditions and steps: Hydrate one FD, open Add FD, fill a synthetic principal/bank, reject upsertFd with disk-full, then save.
 - Expected: Failure feedback and only the original persisted FD remain; unsaved data remains recoverable.
-- Actual/evidence: Failure toast appears, but the portfolio contains 2 FDs. The new record was dispatched before the write succeeded.
+- Original actual/evidence: Failure toast appeared, but the portfolio contained 2 FDs. The new record was dispatched before the write succeeded.
+- Fix: FD and RD saves await persistence before updating portfolio state, navigating back or showing success. A failed write leaves existing records unchanged and the form draft available for retry, with failure feedback.
+- Verification: All 114 provider/screen tests pass. FD/RD regressions cover failed adds with retry, failed edits and pending writes. Targeted ESLint and TypeScript checks pass.
 - Reproduction layer: Jest unit/provider/renderer test; native device reproduction pending.
 
 ## BUG-005: Inactive-to-background transition restarts lock grace timer
@@ -78,7 +80,7 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 - Expected: Renewed start date is 1 January 2027.
 - Original actual/evidence: Renewed start date was 15 June 2026, shortening/replacing the current term.
 - Fix: FD renewal computes the existing maturity date from the stored start date and tenure, then uses it as the new start date in both reducer state and persistence. Tenure is preserved and renewal count increments once. Matured FDs also renew from their previous maturity date.
-- Verification: All 3 BUG-006 regressions pass, covering active/matured FDs, month-end clamping with extra days, derived next maturity, persisted fields and reload. Targeted ESLint passes. The broader provider/screen run has 104 passing tests and 1 failure from the existing BUG-004 failed-save defect.
+- Verification: All 3 BUG-006 regressions pass, covering active/matured FDs, month-end clamping with extra days, derived next maturity, persisted fields and reload. Targeted ESLint passes. Following the BUG-004 fix, the broader provider/screen run passes all 114 tests.
 - Reproduction layer: Jest unit/provider/renderer test; native device reproduction pending.
 
 ## BUG-007: Matured FD has no renewal action
@@ -121,5 +123,5 @@ Severity: High = data reliability/security/business outcome; Medium = incorrect 
 - Reminders may not fire after reboot unless the app is reopened to resynchronize.
 - The SQLite database is not encrypted at rest; app lock protects the UI.
 
-BUG-005 lock grace timing, BUG-006 renewal start date, BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
+BUG-004 save persistence, BUG-005 lock grace timing, BUG-006 renewal start date, BUG-007 renewal action visibility and BUG-008 application validation are fixed with expanded regression coverage. Other confirmed defects remain deferred; no migrations or expectation changes to conceal failures were made.
 

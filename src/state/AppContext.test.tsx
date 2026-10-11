@@ -197,12 +197,45 @@ describe('APP: provider orchestration', () => {
     await run(() => listeners.forEach(listener => listener('active')));
     expect(state.fdList[0].daysRemaining).toBe(before - 1);
   });
-  it('BUG-004 failed save must not leave an unpersisted record in the portfolio', async () => {
-    await mount(); await run(() => actions.openAddFD());
-    await run(() => { actions.setDraftField('principalAmount', 10000); actions.setDraftField('bankName', 'Test Bank'); });
-    jest.mocked(db.upsertFd).mockRejectedValueOnce(new Error('disk full'));
-    await run(() => actions.saveDraftFD(null));
-    expect(state.toast).toBe('Failed to save — try again'); expect(state.fdList).toHaveLength(1);
+  it.each(['FD', 'RD'] as const)('BUG-004 failed %s add preserves the portfolio and draft for retry', async kind => {
+    await mount(); const original = kind === 'FD' ? state.fdList : state.rdList;
+    await run(() => kind === 'FD' ? actions.openAddFD() : actions.openAddRD());
+    await run(() => { actions.setDraftField(kind === 'FD' ? 'principalAmount' : 'monthlyInstallment', 10000); actions.setDraftField('bankName', 'Test Bank'); });
+    const draft = state.editDraft;
+    const save = kind === 'FD' ? db.upsertFd : db.upsertRd;
+    jest.mocked(save).mockRejectedValueOnce(new Error('disk full'));
+    await run(() => kind === 'FD' ? actions.saveDraftFD(null) : actions.saveDraftRD(null));
+    expect(state.toast).toBe('Failed to save — try again');
+    expect(kind === 'FD' ? state.fdList : state.rdList).toEqual(original);
+    expect(state.editDraft).toEqual(draft); expect(goBack).not.toHaveBeenCalled();
+    await run(() => kind === 'FD' ? actions.saveDraftFD(null) : actions.saveDraftRD(null));
+    expect(kind === 'FD' ? state.fdList : state.rdList).toHaveLength(2);
+    expect(state.toast).toBe(kind + ' added successfully'); expect(goBack).toHaveBeenCalledTimes(1);
+  });
+  it.each(['FD', 'RD'] as const)('BUG-004 failed %s edit leaves the saved record unchanged', async kind => {
+    await mount(); const original = kind === 'FD' ? state.fdList : state.rdList;
+    const id = kind === 'FD' ? 'fd-1' : 'rd-1';
+    await run(() => kind === 'FD' ? actions.openEditFD(id) : actions.openEditRD(id));
+    await run(() => actions.setDraftField('remarks', 'unsaved edit'));
+    jest.mocked(kind === 'FD' ? db.upsertFd : db.upsertRd).mockRejectedValueOnce(new Error('disk full'));
+    await run(() => kind === 'FD' ? actions.saveDraftFD(id) : actions.saveDraftRD(id));
+    expect(kind === 'FD' ? state.fdList : state.rdList).toEqual(original);
+    expect(state.editDraft?.remarks).toBe('unsaved edit');
+    expect(state.toast).toBe('Failed to save — try again'); expect(goBack).not.toHaveBeenCalled();
+  });
+  it.each(['FD', 'RD'] as const)('BUG-004 %s save waits for persistence before publishing success', async kind => {
+    await mount(); const original = kind === 'FD' ? state.fdList : state.rdList;
+    await run(() => kind === 'FD' ? actions.openAddFD() : actions.openAddRD());
+    let complete!: () => void;
+    const write = new Promise<void>(resolve => { complete = resolve; });
+    jest.mocked(kind === 'FD' ? db.upsertFd : db.upsertRd).mockReturnValueOnce(write);
+    let saving!: Promise<void>;
+    await run(() => { saving = kind === 'FD' ? actions.saveDraftFD(null) : actions.saveDraftRD(null); });
+    expect(kind === 'FD' ? state.fdList : state.rdList).toEqual(original);
+    expect(state.toast).toBeNull(); expect(goBack).not.toHaveBeenCalled();
+    await run(async () => { complete(); await saving; });
+    expect(kind === 'FD' ? state.fdList : state.rdList).toHaveLength(2);
+    expect(state.toast).toBe(kind + ' added successfully'); expect(goBack).toHaveBeenCalledTimes(1);
   });
   it.each([
     { startDate: '2026-01-01', tenureYears: 1, tenureMonths: 0, tenureDays: 0, renewedMaturity: '2028-01-01' },
