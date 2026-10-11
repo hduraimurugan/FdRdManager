@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, ScrollView, ScrollViewInstance, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, ScrollViewInstance, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAppActions, useAppState } from '../state/AppContext';
 import TopAppBar from '../components/TopAppBar';
@@ -11,6 +11,7 @@ import PortfolioScreen from './PortfolioScreen';
 import PayoutsScreen from './PayoutsScreen';
 import CalculatorsHubScreen from './CalculatorsHubScreen';
 import MoreScreen from './MoreScreen';
+import { fontFamily } from '../theme/typography';
 
 const TITLES: Record<string, string> = {
   home: 'Home',
@@ -89,6 +90,27 @@ export default function MainTabsScreen() {
         showBell={state.activeTab === 'home'}
         unreadCount={state.notifications.length}
         onBellPress={actions.goNotifications}
+        rightContent={state.activeTab === 'portfolio' ? (
+          <View style={[styles.portfolioSwitch, { backgroundColor: theme.inputBg }]}>
+            {(['FD', 'RD'] as const).map(kind => {
+              const selected = state.portfolioTab === kind;
+              return (
+                <Pressable
+                  key={kind}
+                  accessibilityRole="tab"
+                  accessibilityLabel={kind === 'FD' ? 'Fixed Deposits' : 'Recurring Deposits'}
+                  accessibilityState={{ selected }}
+                  onPress={kind === 'FD' ? actions.setPortfolioTabFD : actions.setPortfolioTabRD}
+                  style={[styles.portfolioSwitchItem, { backgroundColor: selected ? theme.accent : 'transparent' }]}
+                >
+                  <Text style={[styles.portfolioSwitchText, { color: selected ? (theme.mode === 'dark' ? theme.bg : '#fff') : theme.textMuted }]}>
+                    {kind} {kind === 'FD' ? state.fdList.length : state.rdList.length}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : undefined}
       />
       <View style={styles.flex} onLayout={handlePagerLayout}>
         <ScrollView
@@ -120,4 +142,7 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
+  portfolioSwitch: { flexDirection: 'row', borderRadius: 12, padding: 3, gap: 2 },
+  portfolioSwitchItem: { minWidth: 58, minHeight: 36, paddingHorizontal: 8, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  portfolioSwitchText: { fontFamily: fontFamily.semibold, fontSize: 12 },
 });

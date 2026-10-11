@@ -13,6 +13,7 @@ export default function TopAppBar({
   showBell = false,
   unreadCount = 0,
   onBellPress,
+  rightContent,
 }: {
   title: string;
   titleIcon?: React.ReactNode;
@@ -21,6 +22,7 @@ export default function TopAppBar({
   showBell?: boolean;
   unreadCount?: number;
   onBellPress?: () => void;
+  rightContent?: React.ReactNode;
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -44,6 +46,7 @@ export default function TopAppBar({
           {title}
         </Text>
       </View>
+      {rightContent}
       {showBell ? (
         <Pressable
           onPress={onBellPress}

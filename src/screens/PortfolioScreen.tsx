@@ -118,90 +118,34 @@ export default function PortfolioScreen() {
   return (
     <View style={styles.flex}>
       <View style={styles.controls}>
-        <View style={[styles.tabs, { backgroundColor: theme.inputBg }]}>
-          {(['FD', 'RD'] as const).map(tab => (
-            <Pressable
-              key={tab}
-              accessibilityRole="tab"
-              accessibilityLabel={
-                tab === 'FD' ? 'Fixed Deposits' : 'Recurring Deposits'
-              }
-              accessibilityState={{ selected: kind === tab }}
-              onPress={
-                tab === 'FD'
-                  ? actions.setPortfolioTabFD
-                  : actions.setPortfolioTabRD
-              }
-              style={[
-                styles.tab,
-                {
-                  backgroundColor: kind === tab ? theme.accent : 'transparent',
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  {
-                    color:
-                      kind === tab
-                        ? theme.mode === 'dark'
-                          ? theme.bg
-                          : '#fff'
-                        : theme.textMuted,
-                  },
-                ]}
+        <View style={styles.searchRow}>
+          <View
+            style={[
+              styles.searchBox,
+              { backgroundColor: theme.card, borderColor: theme.borderStrong },
+            ]}
+          >
+            <IconSearch color={theme.textMuted} />
+            <TextInput
+              value={state.search}
+              onChangeText={actions.setSearch}
+              placeholder="Search bank, number, holder"
+              placeholderTextColor={theme.textMuted}
+              style={[styles.searchInput, { color: theme.text }]}
+              accessibilityLabel="Search bank, number, holder"
+              autoCorrect={false}
+            />
+            {state.search ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+                onPress={() => actions.setSearch('')}
+                style={styles.textButton}
               >
-                {tab}
-              </Text>
-              <Text
-                style={[
-                  styles.count,
-                  {
-                    color:
-                      kind === tab
-                        ? theme.mode === 'dark'
-                          ? theme.bg
-                          : '#fff'
-                        : theme.textMuted,
-                  },
-                ]}
-              >
-                {tab === 'FD' ? state.fdList.length : state.rdList.length}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <View
-          style={[
-            styles.searchBox,
-            { backgroundColor: theme.card, borderColor: theme.borderStrong },
-          ]}
-        >
-          <IconSearch color={theme.textMuted} />
-          <TextInput
-            value={state.search}
-            onChangeText={actions.setSearch}
-            placeholder="Search bank, number, holder"
-            placeholderTextColor={theme.textMuted}
-            style={[styles.searchInput, { color: theme.text }]}
-            accessibilityLabel="Search bank, number, holder"
-            autoCorrect={false}
-          />
-          {state.search ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
-              onPress={() => actions.setSearch('')}
-              style={styles.textButton}
-            >
-              <Text style={[styles.caption, { color: theme.accent }]}>
-                Clear
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <View style={styles.toolbar}>
+                <Text style={[styles.caption, { color: theme.accent }]}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <Pressable
             onPress={actions.openFilterSheet}
             style={[
@@ -215,28 +159,9 @@ export default function PortfolioScreen() {
                 : 'Filter and sort'
             }
           >
-            <IconFilter color={theme.accent} />
-            <Text style={[styles.buttonText, { color: theme.text }]}>
-              Filter & sort{filters.length ? ` (${filters.length})` : ''}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={add}
-            accessibilityRole="button"
-            accessibilityLabel={`Add ${kind}`}
-            style={[styles.addButton, { backgroundColor: theme.accent }]}
-          >
-            <IconPlus
-              size={18}
-              color={theme.mode === 'dark' ? theme.bg : '#fff'}
-            />
-            <Text
-              style={[
-                styles.buttonText,
-                { color: theme.mode === 'dark' ? theme.bg : '#fff' },
-              ]}
-            >
-              Add {kind}
+            <IconFilter size={18} color={theme.accent} />
+            <Text style={[styles.filterText, { color: theme.text }]}>
+              Filter{filters.length ? ` (${filters.length})` : ''}
             </Text>
           </Pressable>
         </View>
@@ -420,6 +345,15 @@ export default function PortfolioScreen() {
           )}
         />
       )}
+      <Pressable
+        onPress={add}
+        accessibilityRole="button"
+        accessibilityLabel={`Add ${kind}`}
+        style={[styles.addFab, { backgroundColor: theme.accent, shadowColor: theme.mode === 'dark' ? '#000' : theme.text }]}
+      >
+        <IconPlus size={20} color={theme.mode === 'dark' ? theme.bg : '#fff'} />
+        <Text style={[styles.buttonText, { color: theme.mode === 'dark' ? theme.bg : '#fff' }]}>Add {kind}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -427,20 +361,8 @@ export default function PortfolioScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   controls: { paddingHorizontal: 16, paddingTop: 10, gap: 8 },
-  tabs: { flexDirection: 'row', borderRadius: 14, padding: 4, gap: 4 },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 10,
-    minHeight: 48,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 8,
-  },
-  tabText: { fontFamily: fontFamily.bold, fontSize: 14 },
-  count: { fontFamily: fontFamily.medium, fontSize: 12 },
   searchBox: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -456,27 +378,35 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     fontSize: 14,
   },
-  toolbar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   filterButton: {
-    flex: 1,
-    minHeight: 48,
+    height: 48,
+    minWidth: 88,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     borderWidth: 1,
     borderRadius: 12,
-    padding: 10,
+    paddingHorizontal: 12,
   },
-  addButton: {
-    minHeight: 48,
+  filterText: { fontFamily: fontFamily.semibold, fontSize: 13 },
+  addFab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 4,
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     borderRadius: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    elevation: 6,
+    shadowOpacity: 0.24,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
   },
   buttonText: { fontFamily: fontFamily.semibold, fontSize: 14, flexShrink: 1 },
   textButton: {
@@ -486,7 +416,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  listPad: { padding: 16, paddingBottom: 24, gap: 12 },
+  listPad: { padding: 16, paddingBottom: 96, gap: 12 },
   listHeader: { gap: 12 },
   summary: { padding: 16, borderRadius: 18, borderWidth: 1, gap: 12 },
   summaryHeading: { fontFamily: fontFamily.semibold, fontSize: 12 },
