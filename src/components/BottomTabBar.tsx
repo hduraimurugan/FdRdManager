@@ -73,8 +73,8 @@ export default function BottomTabBar({ activeTab, onChange }: { activeTab: Activ
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.wrap, { backgroundColor: theme.bg, paddingBottom: Math.max(14, insets.bottom) }]}>
-      <View style={[styles.bar, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.mode === 'dark' ? '#000' : 'rgba(40,35,90,0.35)' }]}>
+    <View style={[styles.wrap, { paddingBottom: Math.max(14, insets.bottom) }]}>
+      <View style={styles.bar}>
         {TABS.map(({ key, label, Icon }) => (
           <TabItem
             key={key}
@@ -93,19 +93,20 @@ export default function BottomTabBar({ activeTab, onChange }: { activeTab: Activ
 
 const styles = StyleSheet.create({
   wrap: {
+    backgroundColor: 'transparent',
     paddingHorizontal: 12,
     paddingTop: 10,
   },
   bar: {
+    // Match Cinemax's flat, transparent tab bar: no filled surface or elevation
+    // shadow behind the controls, including on Android's gesture-navigation area.
+    backgroundColor: 'transparent',
     flexDirection: 'row',
-    borderRadius: 22,
-    borderWidth: 1,
     paddingVertical: 8,
     paddingHorizontal: 4,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 8,
+    shadowOpacity: 0,
+    shadowColor: 'transparent',
+    elevation: 0,
   },
   item: {
     flex: 1,
