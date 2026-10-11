@@ -28,7 +28,7 @@ describe('SEL: portfolio selectors', () => {
   });
   it('SEL-004 aggregates invested amount, active counts and distributions', () => {
     expect(s.homeMetrics(state())).toMatchObject({ totalInvestedFmt: '1.30 L', activeCount: 2, maturedCount: 0 });
-    expect(s.bankDistribution(state())).toEqual([{ bank: 'Test Bank', amountFmt: '1.30 L', pct: 100 }]);
+    expect(s.bankDistribution(state())).toEqual([{ bank: 'Test Bank', amount: 130000, amountFmt: '₹1,30,000', count: 2, pct: 100 }]);
     expect(s.typeDistribution(state(), lightTheme).entries[0]).toMatchObject({ type: 'Regular', pctLabel: '100%', fraction: 1 });
     expect(s.homeMetrics(state({ fdList: [], rdList: [], events: [] })).activeCount).toBe(0);
     expect(s.typeDistribution(state({ fdList: [], rdList: [] }), lightTheme).entries).toEqual([]);
@@ -41,9 +41,40 @@ describe('SEL: portfolio selectors', () => {
     expect(groups.sections.map(g => g.items.map(x => x.id))).toEqual([['1'], ['2'], ['3'], ['4']]);
     expect(s.payoutGroups(state({ events: [{ ...events[0], overdue: false }] }), lightTheme).sections.every(g => g.items.length === 0)).toBe(true);
   });
-  it('SEL-006 projects only interest over six months with a nonzero display floor', () => {
-    const events = [{ ...state().events[0], type: 'Interest', date: '2026-06-20', amount: 200 }];
-    expect(s.projectedInterest(state({ events }))).toEqual([{ label: 'Jun', heightPct: 100 }, ...['Jul', 'Aug', 'Sep', 'Oct', 'Nov'].map(label => ({ label, heightPct: 4 }))]);
+  it('SEL-006 forecasts all remaining monthly payouts with true zero months', () => {
+    const payout = deriveFd(fd({ interestPayoutMode: 'Monthly', interestRate: 12, tenureYears: 0, tenureMonths: 9 }), NOW);
+    const buckets = s.projectedCashFlow(state({ fdList: [payout], rdList: [] }));
+    expect(buckets.map(b => b.total)).toEqual([0, 1000, 1000, 1000, 1000, 0]);
+    expect(buckets[1].receipts[0]).toMatchObject({ recordId: 'fd-1', amount: 1000, date: '2026-07-01', source: 'Interest payout' });
+    expect(s.projectedInterest(state({ fdList: [], rdList: [] })).every(b => b.heightPct === 0)).toBe(true);
+  });
+  it('forecasts quarterly payouts, maturity interest and year transitions without double counting', () => {
+    const payout = deriveFd(fd({ id: 'quarterly', interestPayoutMode: 'Quarterly', interestRate: 12 }), NOW);
+    const portfolio = state({ fdList: [f, payout], rdList: [r] });
+    const buckets = s.projectedCashFlow(portfolio, 12);
+    expect(buckets).toHaveLength(12);
+    expect(buckets[1].total).toBe(3000);
+    expect(buckets[4].total).toBe(3000);
+    expect(buckets[7]).toMatchObject({ key: '2027-01', fullLabel: 'January 2027', total: 3000 + f.interestEarnedTotal + r.interestEarnedTotal });
+    expect(buckets[7].receipts.map(x => x.source)).toEqual(expect.arrayContaining(['Interest payout', 'Interest at maturity']));
+    const maturities = s.projectedCashFlow(portfolio, 12, 'maturity');
+    expect(maturities[7].total).toBe(f.maturityAmount + r.maturityAmount + payout.maturityAmount);
+    expect(maturities.reduce((sum, b) => sum + b.receipts.length, 0)).toBe(3);
+  });
+  it('excludes closed records, past receipts and out-of-range maturities', () => {
+    const past = { ...f, maturityDate: '2026-06-14' };
+    const closed = { ...f, id: 'closed', status: 'Closed' };
+    const far = { ...r, maturityDate: '2028-01-01' };
+    expect(s.projectedCashFlow(state({ fdList: [past, closed], rdList: [far] }), 12).every(b => b.total === 0 && b.receipts.length === 0)).toBe(true);
+  });
+  it('bank allocation uses portfolio shares and retains banks beyond the top five', () => {
+    const deposits = Array.from({ length: 6 }, (_, i) => ({ ...f, id: String(i), bankName: `Bank ${i}`, principalAmount: (i + 1) * 1000 }));
+    const banks = s.bankDistribution(state({ fdList: deposits, rdList: [] }));
+    expect(banks).toHaveLength(6);
+    expect(banks[0].pct).toBeCloseTo(6000 / 21000 * 100);
+    expect(banks.reduce((sum, b) => sum + b.pct, 0)).toBeCloseTo(100);
+    expect(s.bankDistribution(state({ fdList: [{ ...f, principalAmount: 0 }], rdList: [] }))[0].pct).toBe(0);
+    expect(s.homeMetrics(state()).weightedRateLabel).toBe('6.88%');
   });
   it('SEL-007 timeline excludes closed and distant maturities and shows renewal badges', () => {
     const list = [f, { ...f, id: 'soon', daysRemaining: 10, maturityDate: '2026-06-25' }, { ...f, id: 'auto', daysRemaining: 20, maturityDate: '2026-07-05', autoRenewal: 'Yes' }, { ...f, id: 'closed', status: 'Closed' }, { ...f, id: 'far', daysRemaining: 366 }];

@@ -22,7 +22,7 @@ let mockState: AppState;
 let mockLockState: { pinConfigured: boolean; lockEnabled: boolean; biometricEnabled: boolean; biometricAvailable: boolean; graceSeconds: number };
 const names = ['setTab', 'setPortfolioTabFD', 'setPortfolioTabRD', 'setSearch', 'setFilterBank', 'setFilterType', 'setFilterStatus', 'setSortBy', 'resetFilters', 'openFilterSheet', 'closeFilterSheet', 'setThemeLight', 'setThemeDark', 'setUserName', 'showToast', 'goMaturityTimeline', 'goNotifications', 'goBackupRestore', 'goClearData', 'goSecurity', 'goPinSetup', 'goReminderSettings', 'setRemindersEnabled', 'setReminderLeadDays', 'exportBackup', 'importBackup', 'submitImportPassphrase', 'cancelImportPassphrase', 'clearAllData', 'toastComingSoon', 'openFDDetail', 'openRDDetail', 'openAddFD', 'openAddRD', 'openEditFD', 'openEditRD', 'setDraftField', 'saveDraftFD', 'saveDraftRD', 'openFdCalculator', 'openRdCalculator', 'toggleFdPayout', 'toggleFdRenewal', 'toggleFdStatements', 'toggleRdDetails', 'askConfirm', 'closeConfirm', 'runConfirm', 'runConfirmSecondary', 'fcSet', 'rcSet', 'back', 'retryLoad'];
 const registry = [
-  ['HomeScreen', 'Total invested'], ['PortfolioScreen', 'FD001 \u00b7 Regular'], ['PayoutsScreen', 'Upcoming'],
+  ['HomeScreen', 'Portfolio balance'], ['PortfolioScreen', 'FD001 \u00b7 Regular'], ['PayoutsScreen', 'Upcoming'],
   ['CalculatorsHubScreen', 'FD Calculator'], ['MoreScreen', 'Your name'], ['MainTabsScreen', 'Portfolio'],
   ['FdDetailScreen', 'FD001'], ['RdDetailScreen', 'RD001'], ['AddEditFdScreen', 'Add FD'], ['AddEditRdScreen', 'Add RD'],
   ['FdCalculatorScreen', 'FD Calculator'], ['RdCalculatorScreen', 'RD Calculator'], ['NotificationsScreen', 'Notifications'],
@@ -76,6 +76,30 @@ describe.each(['light', 'dark'] as const)('UI rendering in %s theme', mode => {
   });
 });
 describe('UI user interactions', () => {
+  it.each(['light', 'dark'] as const)('dashboard forecast switches horizons, selects months and opens receipts in %s', async mode => {
+    const tree = await screen('HomeScreen', mode);
+    expect(hasText(tree, 'Cash flow forecast')).toBe(true);
+    expect(hasText(tree, 'June 2026')).toBe(true);
+    await press(tree, '12M');
+    expect(hasText(tree, 'From today · next 12 months')).toBe(true);
+    await press(tree, 'Next 6 ›');
+    const month = tree.root.findAll(node => node.props.accessibilityLabel === 'January 2027' && typeof node.props.onPress === 'function')[0];
+    await act(async () => month.props.onPress());
+    expect(hasText(tree, 'January 2027')).toBe(true);
+    expect(hasText(tree, '2 expected receipts')).toBe(true);
+    await press(tree, 'FD001 · 1 Jan 2027');
+    expect(mockActions.openFDDetail).toHaveBeenCalledWith('fd-1');
+    await press(tree, 'Maturity returns');
+    expect(hasText(tree, 'June 2026')).toBe(true);
+    await press(tree, 'Next 6 ›');
+    await act(async () => tree.root.findAll(node => node.props.accessibilityLabel === 'January 2027' && typeof node.props.onPress === 'function')[0].props.onPress());
+    expect(hasText(tree, 'Maturity return')).toBe(true);
+    await press(tree, 'RD001 · 1 Jan 2027');
+    expect(mockActions.openRDDetail).toHaveBeenCalledWith('rd-1');
+    await press(tree, '6M');
+    expect(hasText(tree, 'June 2026')).toBe(true);
+    expect(hasText(tree, 'No maturity returns scheduled for this month.')).toBe(true);
+  });
   it('UI-002 calculator hub routes to both calculators', async () => {
     const tree = await screen('CalculatorsHubScreen'); await press(tree, 'FD Calculator'); await press(tree, 'RD Calculator');
     expect(mockActions.openFdCalculator).toHaveBeenCalled(); expect(mockActions.openRdCalculator).toHaveBeenCalled();

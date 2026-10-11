@@ -8,8 +8,8 @@ import { TypeSlice } from '../state/selectors';
 export default function DonutChart({
   entries,
   centerLabel,
-  size = 88,
-  strokeWidth = 16,
+  size = 144,
+  strokeWidth = 18,
 }: {
   entries: TypeSlice[];
   centerLabel: string;
@@ -22,11 +22,13 @@ export default function DonutChart({
   let cumulative = 0;
 
   return (
-    <View style={[styles.wrap, { width: size, height: size }]}>
+    <View accessible accessibilityRole="image" accessibilityLabel={`Total invested ${centerLabel}. ${entries.map(e => `${e.type} ${e.pctLabel}`).join(', ')}`} style={[styles.wrap, { width: size, height: size }]}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Circle cx={size / 2} cy={size / 2} r={radius} stroke={theme.divider} strokeWidth={strokeWidth} fill="none" />
         <G rotation={-90} origin={`${size / 2}, ${size / 2}`}>
-          {entries.map((seg, i) => {
+          {entries.filter(e => e.fraction > 0).map((seg, i) => {
             const segLen = seg.fraction * circumference;
+            const gap = entries.filter(e => e.fraction > 0).length > 1 ? Math.min(4, segLen * 0.15) : 0;
             const dashoffset = -cumulative;
             cumulative += segLen;
             return (
@@ -37,7 +39,7 @@ export default function DonutChart({
                 r={radius}
                 stroke={seg.color}
                 strokeWidth={strokeWidth}
-                strokeDasharray={`${segLen} ${circumference - segLen}`}
+                strokeDasharray={`${segLen - gap} ${circumference - segLen + gap}`}
                 strokeDashoffset={dashoffset}
                 fill="none"
               />
@@ -46,7 +48,8 @@ export default function DonutChart({
         </G>
       </Svg>
       <View style={[styles.center, { width: size - strokeWidth * 1.4, height: size - strokeWidth * 1.4, borderRadius: (size - strokeWidth * 1.4) / 2, backgroundColor: theme.card }]}>
-        <Text style={[styles.centerText, { color: theme.textMuted }]}>{centerLabel}</Text>
+        <Text style={[styles.caption, { color: theme.textMuted }]}>Invested</Text>
+        <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.centerText, { color: theme.text }]}>{centerLabel}</Text>
       </View>
     </View>
   );
@@ -64,9 +67,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centerText: {
-    fontFamily: fontFamily.regular,
-    fontSize: 11,
+    fontFamily: fontFamily.bold,
+    fontSize: 19,
     textAlign: 'center',
-    lineHeight: 13,
+    marginTop: 4,
   },
+  caption: { fontFamily: fontFamily.medium, fontSize: 10 },
 });

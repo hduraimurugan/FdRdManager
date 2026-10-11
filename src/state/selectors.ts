@@ -227,7 +227,9 @@ export function filteredSorted<T extends FixedDeposit | RecurringDeposit>(
 export function homeMetrics(state: AppState) {
   const activeFds = state.fdList.filter(f => f.status === 'Active');
   const activeRds = state.rdList.filter(r => r.status === 'Active');
-  const totalInvested = [...state.fdList, ...state.rdList].reduce((a, i: any) => a + (i.principalAmount || i.totalDeposited || 0), 0);
+  const fdInvested = state.fdList.reduce((sum, f) => sum + f.principalAmount, 0);
+  const rdInvested = state.rdList.reduce((sum, r) => sum + r.totalDeposited, 0);
+  const totalInvested = fdInvested + rdInvested;
   const currentValue = activeFds.reduce((a, f) => a + f.currentValue, 0) + activeRds.reduce((a, r) => a + r.currentValue, 0);
   const interestEarned = state.fdList.reduce((a, f) => a + f.interestEarnedSoFar, 0) + state.rdList.reduce((a, r) => a + r.interestEarnedSoFar, 0);
   const maturityValue = activeFds.reduce((a, f) => a + f.maturityAmount, 0) + activeRds.reduce((a, r) => a + r.maturityAmount, 0);
@@ -241,8 +243,20 @@ export function homeMetrics(state: AppState) {
   const payoutsThisMonth = state.events.filter(e => (e.type === 'Interest' || e.type === 'Installment Due') && inThisMonth(e.date)).reduce((a, e) => a + e.amount, 0);
   const maturitiesThisMonth = state.events.filter(e => e.type === 'Maturity (P+I)' && inThisMonth(e.date)).length;
   const upcomingMaturityCount = [...activeFds, ...activeRds].filter(x => x.daysRemaining >= 0 && x.daysRemaining <= 365).length;
+  const activeInvested = activeFds.reduce((sum, f) => sum + f.principalAmount, 0) + activeRds.reduce((sum, r) => sum + r.totalDeposited, 0);
+  const weightedRate = activeInvested > 0
+    ? (activeFds.reduce((sum, f) => sum + f.principalAmount * f.interestRate, 0) + activeRds.reduce((sum, r) => sum + r.totalDeposited * r.interestRate, 0)) / activeInvested
+    : 0;
 
   return {
+    currentValueExact: formatINR(currentValue),
+    fdInvestedFmt: formatINR(fdInvested),
+    rdInvestedFmt: formatINR(rdInvested),
+    fdCount: state.fdList.length,
+    rdCount: state.rdList.length,
+    fdShare: totalInvested > 0 ? fdInvested / totalInvested * 100 : 0,
+    rdShare: totalInvested > 0 ? rdInvested / totalInvested * 100 : 0,
+    weightedRateLabel: weightedRate.toFixed(2) + '%',
     totalInvestedFmt: formatCompactINR(totalInvested),
     totalInvestedCompact: '₹' + formatCompactINR(totalInvested),
     currentValueFmt: formatCompactINR(currentValue),
@@ -266,15 +280,16 @@ export function urgentNotifications(state: AppState, theme: ThemeTokens) {
 
 export function bankDistribution(state: AppState) {
   const bankTotals: Record<string, number> = {};
-  [...state.fdList, ...state.rdList].forEach((i: any) => {
-    const amt = i.principalAmount || i.totalDeposited || 0;
+  const bankCounts: Record<string, number> = {};
+  [...state.fdList, ...state.rdList].forEach(i => {
+    const amt = 'principalAmount' in i ? i.principalAmount : i.totalDeposited;
     bankTotals[i.bankName] = (bankTotals[i.bankName] || 0) + amt;
+    bankCounts[i.bankName] = (bankCounts[i.bankName] || 0) + 1;
   });
-  const bankMax = Math.max(...Object.values(bankTotals), 1);
+  const total = Object.values(bankTotals).reduce((sum, amount) => sum + amount, 0);
   return Object.entries(bankTotals)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([bank, amount]) => ({ bank, amountFmt: formatCompactINR(amount), pct: Math.round((amount / bankMax) * 100) }));
+    .map(([bank, amount]) => ({ bank, amount, amountFmt: formatINR(amount), count: bankCounts[bank], pct: total > 0 ? (amount / total) * 100 : 0 }));
 }
 
 export interface TypeSlice {
@@ -282,14 +297,18 @@ export interface TypeSlice {
   pctLabel: string;
   color: string;
   fraction: number;
+  amountFmt: string;
+  count: number;
 }
 
 export function typeDistribution(state: AppState, theme: ThemeTokens): { entries: TypeSlice[]; totalCompact: string } {
   const typeTotals: Record<string, number> = {};
-  [...state.fdList, ...state.rdList].forEach((i: any) => {
-    const t = i.fdType || i.rdType;
-    const amt = i.principalAmount || i.totalDeposited || 0;
+  const typeCounts: Record<string, number> = {};
+  [...state.fdList, ...state.rdList].forEach(i => {
+    const t = 'fdType' in i ? i.fdType : i.rdType;
+    const amt = 'principalAmount' in i ? i.principalAmount : i.totalDeposited;
     typeTotals[t] = (typeTotals[t] || 0) + amt;
+    typeCounts[t] = (typeCounts[t] || 0) + 1;
   });
   const typeSum = Object.values(typeTotals).reduce((a, b) => a + b, 0) || 1;
   const sorted = Object.entries(typeTotals).sort((a, b) => b[1] - a[1]);
@@ -298,25 +317,79 @@ export function typeDistribution(state: AppState, theme: ThemeTokens): { entries
     pctLabel: Math.round((amount / typeSum) * 100) + '%',
     color: TYPE_COLORS[type] || theme.textMuted,
     fraction: amount / typeSum,
+    amountFmt: formatINR(amount),
+    count: typeCounts[type],
   }));
   const total = sorted.reduce((a, [, v]) => a + v, 0);
   return { entries, totalCompact: '₹' + formatCompactINR(total) };
 }
 
+export interface CashFlowReceipt {
+  id: string;
+  recordId: string;
+  kind: 'FD' | 'RD';
+  number: string;
+  bank: string;
+  date: string;
+  amount: number;
+  source: 'Interest payout' | 'Interest at maturity' | 'Maturity return';
+}
+
 export function projectedInterest(state: AppState) {
-  const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const buckets: { m: number; y: number; label: string; total: number }[] = [];
-  for (let i = 0; i < 6; i++) {
-    const dt = addMonthsClamped(today(), i);
-    buckets.push({ m: dt.getMonth(), y: dt.getFullYear(), label: monthLabels[dt.getMonth()], total: 0 });
-  }
-  state.events.forEach(e => {
-    const dt = parseIsoDate(e.date);
-    const b = buckets.find(x => x.m === dt.getMonth() && x.y === dt.getFullYear());
-    if (b && e.type === 'Interest') b.total += e.amount;
+  const buckets = projectedCashFlow(state);
+  const max = Math.max(...buckets.map(b => b.total), 1);
+  return buckets.map(b => ({ ...b, heightPct: b.total / max * 100 }));
+}
+
+export interface CashFlowMonth {
+  key: string;
+  label: string;
+  fullLabel: string;
+  total: number;
+  receipts: CashFlowReceipt[];
+}
+
+/** Cash received from today onward, including every scheduled payout, not just the next one. */
+export function projectedCashFlow(state: AppState, months: 6 | 12 = 6, mode: 'interest' | 'maturity' = 'interest'): CashFlowMonth[] {
+  const now = today();
+  const buckets: CashFlowMonth[] = Array.from({ length: months }, (_, i) => {
+    const dt = addMonthsClamped(now, i);
+    return {
+      key: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`,
+      label: dt.toLocaleDateString('en-IN', { month: 'short' }),
+      fullLabel: dt.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+      total: 0,
+      receipts: [],
+    };
   });
-  const maxBucket = Math.max(...buckets.map(b => b.total), 1);
-  return buckets.map(b => ({ label: b.label, heightPct: Math.max(4, Math.round((b.total / maxBucket) * 100)) }));
+  const add = (receipt: CashFlowReceipt) => {
+    if (parseIsoDate(receipt.date) < now || receipt.amount <= 0) return;
+    const bucket = buckets.find(b => b.key === receipt.date.slice(0, 7));
+    if (bucket) {
+      bucket.total += receipt.amount;
+      bucket.receipts.push(receipt);
+    }
+  };
+  state.fdList.filter(f => f.status === 'Active').forEach(f => {
+    const base = { recordId: f.id, kind: 'FD' as const, number: f.fdNumber, bank: f.bankName };
+    if (mode === 'maturity') {
+      add({ ...base, id: `${f.id}-maturity`, date: f.maturityDate, amount: f.maturityAmount, source: 'Maturity return' });
+    } else if (f.isPayoutFD) {
+      const amount = Math.round(payoutPerPeriod(f.principalAmount, f.interestRate, f.interestPayoutMode));
+      payoutSchedule(f.startDate, f.interestPayoutMode, f.maturityDate).forEach(date => {
+        add({ ...base, id: `${f.id}-${date}`, date, amount, source: 'Interest payout' });
+      });
+    } else {
+      add({ ...base, id: `${f.id}-interest`, date: f.maturityDate, amount: f.interestEarnedTotal, source: 'Interest at maturity' });
+    }
+  });
+  state.rdList.filter(r => r.status === 'Active').forEach(r => {
+    add({ recordId: r.id, kind: 'RD', number: r.rdNumber, bank: r.bankName, id: `${r.id}-${mode}`, date: r.maturityDate,
+      amount: mode === 'maturity' ? r.maturityAmount : r.interestEarnedTotal,
+      source: mode === 'maturity' ? 'Maturity return' : 'Interest at maturity' });
+  });
+  buckets.forEach(bucket => bucket.receipts.sort((a, b) => a.date.localeCompare(b.date)));
+  return buckets;
 }
 
 // ---------------------------------------------------------------------------

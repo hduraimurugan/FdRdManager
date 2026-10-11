@@ -4,19 +4,18 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
-import { homeMetrics, urgentNotifications, bankDistribution, typeDistribution, projectedInterest } from '../state/selectors';
+import { homeMetrics, urgentNotifications, bankDistribution, typeDistribution } from '../state/selectors';
 import { today } from '../data/derive';
 import { GRADIENT_ANGLE } from '../theme/colors';
 import { useRefresh } from '../hooks/useRefresh';
 import Card from '../components/Card';
 import BankLogo from '../components/BankLogo';
-import StatPill from '../components/StatPill';
 import DonutChart from '../components/DonutChart';
-import BarChart from '../components/BarChart';
+import CashFlowCard from '../components/CashFlowCard';
 import SkeletonBlock from '../components/SkeletonBlock';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
-import { IconRupeeTrend, IconCard, IconTrendUp, IconCalendar, IconChevronRight, IconWallet, IconBell } from '../components/icons/Icons';
+import { IconTrendUp, IconCalendar, IconChevronRight, IconWallet, IconBell } from '../components/icons/Icons';
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -32,7 +31,6 @@ export default function HomeScreen() {
   const urgent = useMemo(() => urgentNotifications(state, theme), [state, theme]);
   const banks = useMemo(() => bankDistribution(state), [state]);
   const types = useMemo(() => typeDistribution(state, theme), [state, theme]);
-  const projection = useMemo(() => projectedInterest(state), [state]);
   const isEmpty = state.fdList.length === 0 && state.rdList.length === 0;
 
   if (state.loadError) {
@@ -81,57 +79,60 @@ export default function HomeScreen() {
     >
       <LinearGradient colors={theme.gradientHero.colors} locations={theme.gradientHero.locations} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.hero}>
         <Text style={[styles.heroLabel, { color: theme.textMuted }]}>{todayLabel}</Text>
-        <Text style={[styles.heroSub, { color: theme.textMuted }]}>Current value</Text>
-        <Text style={[styles.heroValue, { color: theme.text }]}>{metrics.currentValueFmt}</Text>
-        <View style={styles.heroRow}>
-          <View>
-            <Text style={[styles.heroItemLabel, { color: theme.textMuted }]}>Invested</Text>
-            <Text style={[styles.heroItemValue, { color: theme.text }]}>{metrics.totalInvestedFmt}</Text>
+        <View style={styles.heroHeading}>
+          <Text style={[styles.heroSub, { color: theme.textMuted }]}>Portfolio balance</Text>
+          <View style={[styles.liveBadge, { backgroundColor: theme.tint(theme.success, 0.12) }]}>
+            <View style={[styles.liveDot, { backgroundColor: theme.success }]} />
+            <Text style={[styles.badgeText, { color: theme.success }]}>{metrics.activeCount} active</Text>
           </View>
-          <View>
-            <Text style={[styles.heroItemLabel, { color: theme.textMuted }]}>Interest earned</Text>
-            <Text style={[styles.heroItemValue, { color: theme.success }]}>{metrics.interestEarnedFmt}</Text>
+        </View>
+        <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.heroValue, { color: theme.text }]}>₹{metrics.currentValueFmt}</Text>
+        <Text style={[styles.heroExact, { color: theme.textMuted }]}>{metrics.currentValueExact} across active deposits</Text>
+        <View style={[styles.heroRow, { borderTopColor: theme.tint(theme.text, 0.1) }]}>
+          <View style={styles.flexShrink}>
+            <Text style={[styles.heroItemLabel, { color: theme.textMuted }]}>Invested (all)</Text>
+            <Text style={[styles.heroItemValue, { color: theme.text }]}>₹{metrics.totalInvestedFmt}</Text>
+          </View>
+          <View style={styles.flexShrink}>
+            <Text style={[styles.heroItemLabel, { color: theme.textMuted }]}>Avg. active rate</Text>
+            <Text style={[styles.heroItemValue, { color: theme.text }]}>{metrics.weightedRateLabel} <Text style={styles.rateUnit}>p.a.</Text></Text>
+          </View>
+          <View style={styles.flexShrink}>
+            <Text style={[styles.heroItemLabel, { color: theme.textMuted }]}>Banks</Text>
+            <Text style={[styles.heroItemValue, { color: theme.text }]}>{banks.length}</Text>
           </View>
         </View>
       </LinearGradient>
 
       <View style={styles.statsGrid}>
         <Card style={styles.statCard}>
-          <View style={[styles.statIcon, { backgroundColor: 'rgba(111,102,232,0.13)' }]}>
-            <IconRupeeTrend color={theme.accent} />
-          </View>
-          <Text style={[styles.statLabel, { color: theme.textMuted }]}>Total invested</Text>
-          <Text style={[styles.statValue, { color: theme.text }]}>{metrics.totalInvestedFmt}</Text>
-        </Card>
-        <Card style={styles.statCard}>
-          <View style={[styles.statIcon, { backgroundColor: 'rgba(91,158,224,0.15)' }]}>
-            <IconCard color="#5b9ee0" />
-          </View>
-          <Text style={[styles.statLabel, { color: theme.textMuted }]}>Current value</Text>
-          <Text style={[styles.statValue, { color: theme.text }]}>{metrics.currentValueFmt}</Text>
-        </Card>
-        <Card style={styles.statCard}>
-          <View style={[styles.statIcon, { backgroundColor: 'rgba(14,164,114,0.13)' }]}>
-            <IconTrendUp color={theme.success} />
+          <View style={[styles.statIcon, { backgroundColor: theme.tint(theme.success, 0.12) }]}>
+            <IconTrendUp color={theme.success} size={18} />
           </View>
           <Text style={[styles.statLabel, { color: theme.textMuted }]}>Interest earned</Text>
-          <Text style={[styles.statValue, { color: theme.success }]}>{metrics.interestEarnedFmt}</Text>
+          <Text style={[styles.statValue, { color: theme.success }]}>₹{metrics.interestEarnedFmt}</Text>
+          <Text style={[styles.cardCaption, { color: theme.textMuted }]}>Earned across all deposits</Text>
         </Card>
         <Card style={styles.statCard}>
-          <View style={[styles.statIcon, { backgroundColor: 'rgba(226,121,63,0.14)' }]}>
-            <IconCalendar color={theme.orange} />
+          <View style={[styles.statIcon, { backgroundColor: theme.tint(theme.orange, 0.12) }]}>
+            <IconCalendar color={theme.orange} size={18} />
           </View>
           <Text style={[styles.statLabel, { color: theme.textMuted }]}>Maturity value</Text>
-          <Text style={[styles.statValue, { color: theme.text }]}>{metrics.maturityValueFmt}</Text>
+          <Text style={[styles.statValue, { color: theme.text }]}>₹{metrics.maturityValueFmt}</Text>
+          <Text style={[styles.cardCaption, { color: theme.textMuted }]}>Active deposits at maturity</Text>
         </Card>
       </View>
 
-      <View style={styles.pillRow}>
-        <StatPill value={metrics.activeCount} label="Active deposits" />
-        <StatPill value={metrics.maturedCount} label="Matured" />
-        <StatPill value={metrics.payoutsThisMonthFmt} label="Payouts this month" />
-        <StatPill value={metrics.maturitiesThisMonth} label="Maturities this month" />
-      </View>
+      <Card style={styles.activityCard}>
+        <Text style={[styles.sectionLabel, { color: theme.text }]}>This month</Text>
+        <View style={styles.activityRow}>
+          <View style={styles.flexShrink}><Text style={[styles.activityValue, { color: theme.accent }]}>{metrics.payoutsThisMonthFmt}</Text><Text style={[styles.cardCaption, { color: theme.textMuted }]}>Payouts & installments</Text></View>
+          <View style={[styles.activityDivider, { backgroundColor: theme.borderStrong }]} />
+          <View style={styles.flexShrink}><Text style={[styles.activityValue, { color: theme.text }]}>{metrics.maturitiesThisMonth}</Text><Text style={[styles.cardCaption, { color: theme.textMuted }]}>Maturities</Text></View>
+          <View style={[styles.activityDivider, { backgroundColor: theme.borderStrong }]} />
+          <View style={styles.flexShrink}><Text style={[styles.activityValue, { color: theme.text }]}>{metrics.maturedCount}</Text><Text style={[styles.cardCaption, { color: theme.textMuted }]}>Matured overall</Text></View>
+        </View>
+      </Card>
 
       {urgent.length > 0 && (
         <View>
@@ -154,17 +155,27 @@ export default function HomeScreen() {
         </View>
       )}
 
+      <CashFlowCard />
+
       <View>
-        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Investment by bank</Text>
+        <Text style={[styles.sectionLabel, { color: theme.text }]}>Bank allocation</Text>
         <Card style={styles.gap12}>
+          <View style={styles.rowBetween}>
+            <Text style={[styles.cardCaption, { color: theme.textMuted }]}>All recorded deposits · {banks.length} bank{banks.length === 1 ? '' : 's'}</Text>
+            <Text style={[styles.badgeText, { color: theme.accent }]}>{metrics.totalInvestedCompact}</Text>
+          </View>
           {banks.map(b => (
             <View key={b.bank}>
               <View style={styles.rowBetween}>
                 <View style={styles.bankLabelRow}>
-                  <BankLogo bankName={b.bank} size={22} />
+                  <BankLogo bankName={b.bank} size={28} />
                   <Text style={[styles.bankLabel, { color: theme.text }]}>{b.bank}</Text>
                 </View>
-                <Text style={[styles.bankAmount, { color: theme.textMuted }]}>{b.amountFmt}</Text>
+                <Text style={[styles.bankAmount, { color: theme.text }]}>{b.amountFmt}</Text>
+              </View>
+              <View style={styles.allocationMeta}>
+                <Text style={[styles.cardCaption, { color: theme.textMuted }]}>{b.count} deposit{b.count === 1 ? '' : 's'}</Text>
+                <Text style={[styles.badgeText, { color: theme.accent }]}>{b.pct.toFixed(1)}% of invested</Text>
               </View>
               <View style={[styles.barTrack, { backgroundColor: theme.divider }]}>
                 <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={[styles.barFill, { width: `${b.pct}%` }]} />
@@ -175,29 +186,47 @@ export default function HomeScreen() {
       </View>
 
       <View>
-        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Investment by type</Text>
+        <Text style={[styles.sectionLabel, { color: theme.text }]}>Deposit mix</Text>
         <Card style={styles.typeCard}>
-          <DonutChart entries={types.entries} centerLabel={types.totalCompact} />
+          <View style={styles.donutSummary}>
+            <DonutChart entries={types.entries} centerLabel={types.totalCompact} />
+            <Text style={[styles.cardCaption, { color: theme.textMuted }]}>All recorded deposits · {types.entries.length} type{types.entries.length === 1 ? '' : 's'}</Text>
+          </View>
           <View style={styles.typeList}>
             {types.entries.map(t => (
               <View key={t.type} style={styles.typeRow}>
                 <View style={[styles.typeDot, { backgroundColor: t.color }]} />
-                <Text style={[styles.typeLabel, { color: theme.text }]}>{t.type}</Text>
-                <Text style={[styles.typePct, { color: theme.textFaint }]}>{t.pctLabel}</Text>
+                <View style={styles.flexShrink}>
+                  <Text style={[styles.typeLabel, { color: theme.text }]}>{t.type}</Text>
+                  <Text style={[styles.cardCaption, { color: theme.textMuted }]}>{t.count} deposit{t.count === 1 ? '' : 's'} · {t.amountFmt}</Text>
+                </View>
+                <Text style={[styles.typePct, { color: theme.text }]}>{t.pctLabel}</Text>
               </View>
             ))}
+          </View>
+          <View style={[styles.productMix, { borderTopColor: theme.divider }]}>
+            <Text style={[styles.bankLabel, { color: theme.text }]}>Fixed vs recurring</Text>
+            <View style={[styles.productTrack, { backgroundColor: theme.divider }]}>
+              <View style={{ width: `${metrics.fdShare}%`, backgroundColor: theme.accent }} />
+              <View style={{ width: `${metrics.rdShare}%`, backgroundColor: theme.success }} />
+            </View>
+            <View style={styles.productRow}>
+              <View style={styles.flexShrink}>
+                <Text style={[styles.badgeText, { color: theme.accent }]}>FD · {metrics.fdShare.toFixed(1)}%</Text>
+                <Text style={[styles.bankAmount, styles.productAmount, { color: theme.text }]}>{metrics.fdInvestedFmt}</Text>
+                <Text style={[styles.cardCaption, { color: theme.textMuted }]}>{metrics.fdCount} fixed deposit{metrics.fdCount === 1 ? '' : 's'}</Text>
+              </View>
+              <View style={styles.flexShrink}>
+                <Text style={[styles.badgeText, { color: theme.success }]}>RD · {metrics.rdShare.toFixed(1)}%</Text>
+                <Text style={[styles.bankAmount, styles.productAmount, { color: theme.text }]}>{metrics.rdInvestedFmt}</Text>
+                <Text style={[styles.cardCaption, { color: theme.textMuted }]}>{metrics.rdCount} recurring deposit{metrics.rdCount === 1 ? '' : 's'}</Text>
+              </View>
+            </View>
           </View>
         </Card>
       </View>
 
-      <View>
-        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Projected interest — next 6 months</Text>
-        <Card>
-          <BarChart bars={projection} />
-        </Card>
-      </View>
-
-      <Pressable onPress={actions.goMaturityTimeline}>
+      <Pressable accessibilityRole="button" accessibilityLabel="View maturity timeline" onPress={actions.goMaturityTimeline}>
         <Card style={styles.timelineRow}>
           <LinearGradient colors={theme.gradientAccent.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.timelineIcon}>
             <IconCalendar color="#fff" size={19} />
@@ -227,34 +256,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   hero: {
-    borderRadius: 22,
-    padding: 20,
-    paddingHorizontal: 20,
+    borderRadius: 24,
+    padding: 22,
   },
   heroLabel: {
     fontFamily: fontFamily.semibold,
-    fontSize: 12.5,
+    fontSize: 10.5,
     letterSpacing: 0.2,
   },
   heroSub: {
     fontFamily: fontFamily.regular,
     fontSize: 13,
-    marginTop: 8,
   },
   heroValue: {
     fontFamily: fontFamily.extrabold,
-    fontSize: 32,
-    letterSpacing: -0.4,
-    marginTop: 2,
+    fontSize: 40,
+    letterSpacing: -1.5,
+    marginTop: 8,
+    fontVariant: ['tabular-nums'],
   },
   heroRow: {
     flexDirection: 'row',
-    gap: 18,
-    marginTop: 14,
+    gap: 12,
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
   },
   heroItemLabel: {
     fontFamily: fontFamily.regular,
-    fontSize: 11,
+    fontSize: 10,
   },
   heroItemValue: {
     fontFamily: fontFamily.bold,
@@ -267,8 +297,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   statCard: {
-    width: '47.5%',
-    padding: 14,
+    flex: 1,
+    minWidth: 130,
+    padding: 16,
+    borderRadius: 20,
   },
   statIcon: {
     width: 30,
@@ -285,27 +317,21 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontFamily: fontFamily.bold,
-    fontSize: 20,
+    fontSize: 24,
     letterSpacing: -0.2,
   },
-  pillRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingVertical: 2,
-  },
   sectionLabel: {
-    fontFamily: fontFamily.semibold,
-    fontSize: 13,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    fontFamily: fontFamily.bold,
+    fontSize: 16,
+    letterSpacing: -0.3,
     marginBottom: 10,
   },
   gap8: {
     gap: 8,
   },
   gap12: {
-    gap: 12,
+    gap: 18,
+    borderRadius: 22,
   },
   urgentRow: {
     flexDirection: 'row',
@@ -346,12 +372,15 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   bankAmount: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12.5,
+    fontFamily: fontFamily.semibold,
+    fontSize: 12,
+    flexShrink: 1,
+    marginLeft: 8,
+    fontVariant: ['tabular-nums'],
   },
   barTrack: {
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 4,
     overflow: 'hidden',
   },
   barFill: {
@@ -359,13 +388,11 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   typeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 18,
+    gap: 20,
+    borderRadius: 22,
   },
   typeList: {
-    flex: 1,
-    gap: 7,
+    gap: 14,
   },
   typeRow: {
     flexDirection: 'row',
@@ -373,18 +400,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   typeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 3,
   },
   typeLabel: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    flex: 1,
+    fontFamily: fontFamily.semibold,
+    fontSize: 13,
   },
   typePct: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
+    fontFamily: fontFamily.bold,
+    fontSize: 14,
   },
   timelineRow: {
     flexDirection: 'row',
@@ -407,4 +433,21 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     marginTop: 2,
   },
+  heroHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 18 },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  liveDot: { width: 5, height: 5, borderRadius: 3 },
+  badgeText: { fontFamily: fontFamily.semibold, fontSize: 10 },
+  heroExact: { fontFamily: fontFamily.regular, fontSize: 11, marginTop: 4 },
+  rateUnit: { fontFamily: fontFamily.regular, fontSize: 9 },
+  cardCaption: { fontFamily: fontFamily.regular, fontSize: 10, lineHeight: 15, marginTop: 4 },
+  activityCard: { borderRadius: 18, padding: 16 },
+  activityRow: { flexDirection: 'row', gap: 12 },
+  activityValue: { fontFamily: fontFamily.bold, fontSize: 18, fontVariant: ['tabular-nums'] },
+  activityDivider: { width: 1 },
+  allocationMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, gap: 8 },
+  donutSummary: { alignItems: 'center', gap: 10 },
+  productMix: { borderTopWidth: 1, paddingTop: 16, gap: 12 },
+  productTrack: { height: 8, borderRadius: 4, overflow: 'hidden', flexDirection: 'row' },
+  productRow: { flexDirection: 'row', gap: 16 },
+  productAmount: { marginLeft: 0, marginTop: 6 },
 });
