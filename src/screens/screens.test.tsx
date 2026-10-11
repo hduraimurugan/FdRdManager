@@ -182,8 +182,34 @@ describe('UI user interactions', () => {
   it.each(['FdCalculatorScreen', 'RdCalculatorScreen'])('UI-009 %s shows calculated results and forwards input changes', async name => {
     const tree = await screen(name); await act(async () => tree.root.findAllByType(FormField)[0].props.onChangeText('20000'));
     expect(mockActions.setDraftField).toHaveBeenCalledWith(name === 'FdCalculatorScreen' ? 'principal' : 'monthlyInstallment', '20000');
-    expect(hasText(tree, 'Maturity amount')).toBe(true);
+    expect(hasText(tree, 'Estimated maturity value')).toBe(true);
     if (name === 'RdCalculatorScreen') expect(hasText(tree, '₹60,000')).toBe(true);
+  });
+  it.each(['FdCalculatorScreen', 'RdCalculatorScreen'])('%s duration shortcuts update all duration fields', async name => {
+    const tree = await screen(name);
+    await press(tree, '6 months');
+    expect(mockActions.setDraftField).toHaveBeenCalledWith('years', '0');
+    expect(mockActions.setDraftField).toHaveBeenCalledWith('months', '6');
+    if (name === 'FdCalculatorScreen') expect(mockActions.setDraftField).toHaveBeenCalledWith('days', '0');
+  });
+  it.each(['FdCalculatorScreen', 'RdCalculatorScreen'])('%s hides the estimate until invalid inputs are corrected', async name => {
+    if (name === 'FdCalculatorScreen') mockState.fdCalc.principal = '';
+    else mockState.rdCalc.monthlyInstallment = '';
+    const tree = await screen(name);
+    expect(hasText(tree, 'Estimated maturity value')).toBe(false);
+    expect(hasText(tree, 'Your estimate will appear here')).toBe(true);
+    if (name === 'FdCalculatorScreen') mockState.fdCalc.principal = 100000;
+    else mockState.rdCalc.monthlyInstallment = 5000;
+    await act(async () => tree.update(<ThemeProvider mode="light">{element(name)}</ThemeProvider>));
+    expect(hasText(tree, 'Estimated maturity value')).toBe(true);
+  });
+  it('FD calculator reveals comparisons and tax settings on request', async () => {
+    const tree = await screen('FdCalculatorScreen');
+    expect(hasText(tree, 'Extra interest from compounding')).toBe(false);
+    await press(tree, 'Simple vs compound interest');
+    expect(hasText(tree, 'Extra interest from compounding')).toBe(true);
+    await press(tree, 'Tax estimate');
+    expect(hasText(tree, 'Estimated deduction on interest (%)')).toBe(true);
   });
   it('UI-010 More changes theme, profile and routes to backup', async () => {
     const tree = await screen('MoreScreen'); await input(tree, 'New name'); expect(mockActions.setUserName).toHaveBeenCalledWith('New name');

@@ -1,7 +1,6 @@
-import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { fontFamily } from '../theme/typography';
 import { useAppActions, useAppState } from '../state/AppContext';
 import { calcFD, formatDate, formatINR, COMPOUNDING_FREQUENCIES } from '../data/portfolioData';
 import Card from '../components/Card';
@@ -9,194 +8,101 @@ import TopAppBar from '../components/TopAppBar';
 import FormField from '../components/FormField';
 import FormSelect from '../components/FormSelect';
 import DateField from '../components/DateField';
+import { CalculatorDisclosure, CalculatorEmpty, CalculatorHeading, CalculatorMetric, CalculatorSummary, DurationPresets, SectionHeading, calculatorStyles as styles, numberError } from '../components/CalculatorUI';
 
 export default function FdCalculatorScreen() {
   const theme = useTheme();
-  const state = useAppState();
+  const { fdCalc: fc } = useAppState();
   const actions = useAppActions();
-  const fc = state.fdCalc;
-
-  const result = useMemo(() => {
-    const r = calcFD({
-      principal: Number(fc.principal) || 0,
-      ratePct: Number(fc.ratePct) || 0,
-      startDate: fc.startDate,
-      years: Number(fc.years) || 0,
-      months: Number(fc.months) || 0,
-      days: Number(fc.days) || 0,
-      compounding: fc.compounding,
-      tdsPercent: Number(fc.tdsPercent) || 0,
-    });
-    return {
-      maturityDateLabel: formatDate(r.maturityDate, 'short'),
-      totalDays: r.totalDays,
-      simpleInterestFmt: formatINR(r.simpleInterest),
-      compoundInterestFmt: formatINR(r.compoundInterest),
-      simpleMaturityFmt: formatINR(r.simpleMaturity),
-      compoundMaturityFmt: formatINR(r.compoundMaturity),
-      effectiveYieldLabel: r.effectiveYield.toFixed(2) + '%',
-      perMonthFmt: formatINR(r.interestPerMonth),
-      perQuarterFmt: formatINR(r.interestPerQuarter),
-      perYearFmt: formatINR(r.interestPerYear),
-      afterTaxFmt: formatINR(r.afterTaxInterest),
-      roiLabel: r.roi.toFixed(2) + '%',
-    };
-  }, [fc]);
+  const [advanced, setAdvanced] = useState(false);
+  const [comparison, setComparison] = useState(false);
+  const [insights, setInsights] = useState(false);
+  const errors = {
+    principal: numberError(fc.principal, 'a deposit amount', 1),
+    rate: numberError(fc.ratePct, 'an annual rate', 0, 100),
+    years: numberError(fc.years, 'years', 0, 100, true),
+    months: numberError(fc.months, 'months', 0, 1200, true),
+    days: numberError(fc.days, 'days', 0, 36500, true),
+    tax: numberError(fc.tdsPercent, 'a deduction rate', 0, 100),
+  };
+  const duration = Number(fc.years) * 12 + Number(fc.months);
+  const durationError = duration === 0 && Number(fc.days) === 0 ? 'Choose a duration greater than zero.'
+    : duration + Number(fc.days) / 30.44 > 1200 ? 'Use a duration of up to 100 years.' : undefined;
+  const valid = !Object.values(errors).some(Boolean) && !durationError;
+  const result = useMemo(() => valid ? calcFD({
+    principal: Number(fc.principal), ratePct: Number(fc.ratePct), startDate: fc.startDate,
+    years: Number(fc.years), months: Number(fc.months), days: Number(fc.days),
+    compounding: fc.compounding, tdsPercent: Number(fc.tdsPercent),
+  }) : null, [fc, valid]);
+  const setDuration = (months: number) => {
+    actions.fcSet('years')(String(Math.floor(months / 12)));
+    actions.fcSet('months')(String(months % 12));
+    actions.fcSet('days')('0');
+  };
+  const compoundingHelp: Record<string, string> = {
+    Monthly: 'Interest is added to your deposit every month.',
+    Quarterly: 'Interest is added to your deposit every 3 months.',
+    'Half-Yearly': 'Interest is added to your deposit every 6 months.',
+    Yearly: 'Interest is added to your deposit once a year.',
+  };
 
   return (
-    <View style={[styles.flex, { backgroundColor: theme.bg }]}>
+    <KeyboardAvoidingView style={[styles.flex, { backgroundColor: theme.bg }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <TopAppBar title="FD Calculator" showBack onBack={actions.back} />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        <CalculatorHeading title="See your lump sum grow" subtitle="Estimate what a fixed deposit could return. Your estimate updates as you edit." />
+        {result ? <CalculatorSummary deposited={Number(fc.principal)} interest={result.compoundInterest} maturityDate={formatDate(result.maturityDate, 'medium')} caption="Estimated maturity value" detail={`${fc.compounding} compounding · ${result.totalDays.toLocaleString('en-IN')} days invested`} /> : null}
         <Card style={styles.section}>
-          <FormField label="Principal amount (₹)" value={String(fc.principal)} onChangeText={actions.fcSet('principal')} keyboardType="numeric" />
-          <FormField label="Interest rate (% p.a.)" value={String(fc.ratePct)} onChangeText={actions.fcSet('ratePct')} keyboardType="numeric" />
-          <DateField label="Start date" value={fc.startDate} onChange={actions.fcSet('startDate')} />
-          <View style={styles.row3}>
-            <View style={styles.flex1}>
-              <FormField label="Years" value={String(fc.years)} onChangeText={actions.fcSet('years')} keyboardType="numeric" />
-            </View>
-            <View style={styles.flex1}>
-              <FormField label="Months" value={String(fc.months)} onChangeText={actions.fcSet('months')} keyboardType="numeric" />
-            </View>
-            <View style={styles.flex1}>
-              <FormField label="Days" value={String(fc.days)} onChangeText={actions.fcSet('days')} keyboardType="numeric" />
-            </View>
-          </View>
-          <FormSelect label="Compounding frequency" value={fc.compounding} options={COMPOUNDING_FREQUENCIES} onChange={actions.fcSet('compounding')} />
-          <FormField label="TDS / tax rate (%)" value={String(fc.tdsPercent)} onChangeText={actions.fcSet('tdsPercent')} keyboardType="numeric" />
+          <SectionHeading title="Deposit details" subtitle="Start with the amount you plan to invest." />
+          <FormField label="Deposit amount (₹)" accessibilityLabel="Deposit amount in rupees" value={String(fc.principal)} onChangeText={actions.fcSet('principal')} keyboardType="decimal-pad" error={errors.principal} style={styles.amountInput} />
+          {!errors.principal ? <Text style={[styles.body, { color: theme.textMuted }]}>One-time investment of {formatINR(Number(fc.principal))}</Text> : null}
+          <FormField label="Annual interest rate (%)" accessibilityLabel="Annual interest rate in percent" value={String(fc.ratePct)} onChangeText={actions.fcSet('ratePct')} keyboardType="decimal-pad" error={errors.rate} style={styles.input} />
+          <Text style={[styles.body, { color: theme.textMuted }]}>Use the yearly rate offered by your bank.</Text>
         </Card>
-
-        <Card>
-          <Text style={[styles.sectionLabel, { color: theme.textMuted, marginBottom: 12 }]}>Results — simple vs compound</Text>
-          <View style={styles.resultHeaderRow}>
-            <Text style={[styles.colHeader, styles.metricCol, { color: theme.textFaint }]}>Metric</Text>
-            <Text style={[styles.colHeader, styles.valCol, { color: theme.textFaint }]}>Simple</Text>
-            <Text style={[styles.colHeader, styles.valCol, { color: theme.textFaint }]}>Compound</Text>
-          </View>
-          <View style={styles.resultRow}>
-            <Text style={[styles.rowLabel, styles.metricCol, { color: theme.textMuted }]}>Maturity date</Text>
-            <Text style={[styles.rowValue, { color: theme.text, flex: 2 }]}>{result.maturityDateLabel}</Text>
-          </View>
-          <View style={styles.resultRow}>
-            <Text style={[styles.rowLabel, styles.metricCol, { color: theme.textMuted }]}>Total days</Text>
-            <Text style={[styles.rowValue, styles.valCol, { color: theme.text }]}>{result.totalDays}</Text>
-            <Text style={[styles.rowValue, styles.valCol, { color: theme.text }]}>{result.totalDays}</Text>
-          </View>
-          <View style={styles.resultRow}>
-            <Text style={[styles.rowLabel, styles.metricCol, { color: theme.textMuted }]}>Interest earned</Text>
-            <Text style={[styles.rowValueBold, styles.valCol, { color: theme.text }]}>{result.simpleInterestFmt}</Text>
-            <Text style={[styles.rowValueBold, styles.valCol, { color: theme.success }]}>{result.compoundInterestFmt}</Text>
-          </View>
-          <View style={styles.resultRow}>
-            <Text style={[styles.rowLabel, styles.metricCol, { color: theme.textMuted }]}>Maturity amount</Text>
-            <Text style={[styles.rowValueBold, styles.valCol, { color: theme.text }]}>{result.simpleMaturityFmt}</Text>
-            <Text style={[styles.rowValueBold, styles.valCol, { color: theme.success }]}>{result.compoundMaturityFmt}</Text>
-          </View>
-        </Card>
-
         <Card style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: theme.textMuted, marginBottom: 4 }]}>Additional insights (compound)</Text>
-          <View style={styles.kvRow}>
-            <Text style={[styles.kvLabel, { color: theme.textMuted }]}>Effective yield (p.a.)</Text>
-            <Text style={[styles.kvValue, { color: theme.text }]}>{result.effectiveYieldLabel}</Text>
+          <SectionHeading title="How long will you invest?" subtitle="Choose a common duration or enter your own below." />
+          <DurationPresets months={Number(fc.days) === 0 ? duration : -1} onSelect={setDuration} />
+          <View style={styles.row}>
+            <View style={styles.flex}><FormField label="Years" accessibilityLabel="Duration in years" value={String(fc.years)} onChangeText={actions.fcSet('years')} keyboardType="number-pad" error={errors.years} style={styles.input} /></View>
+            <View style={styles.flex}><FormField label="Months" accessibilityLabel="Additional months" value={String(fc.months)} onChangeText={actions.fcSet('months')} keyboardType="number-pad" error={errors.months} style={styles.input} /></View>
+            <View style={styles.flex}><FormField label="Days" accessibilityLabel="Additional days" value={String(fc.days)} onChangeText={actions.fcSet('days')} keyboardType="number-pad" error={errors.days} style={styles.input} /></View>
           </View>
-          <View style={styles.kvRow}>
-            <Text style={[styles.kvLabel, { color: theme.textMuted }]}>Interest per month</Text>
-            <Text style={[styles.kvValue, { color: theme.text }]}>{result.perMonthFmt}</Text>
-          </View>
-          <View style={styles.kvRow}>
-            <Text style={[styles.kvLabel, { color: theme.textMuted }]}>Interest per quarter</Text>
-            <Text style={[styles.kvValue, { color: theme.text }]}>{result.perQuarterFmt}</Text>
-          </View>
-          <View style={styles.kvRow}>
-            <Text style={[styles.kvLabel, { color: theme.textMuted }]}>Interest per year</Text>
-            <Text style={[styles.kvValue, { color: theme.text }]}>{result.perYearFmt}</Text>
-          </View>
-          <View style={styles.kvRow}>
-            <Text style={[styles.kvLabel, { color: theme.textMuted }]}>After-tax interest</Text>
-            <Text style={[styles.kvValue, { color: theme.text }]}>{result.afterTaxFmt}</Text>
-          </View>
-          <View style={styles.kvRow}>
-            <Text style={[styles.kvLabel, { color: theme.textMuted }]}>ROI on principal</Text>
-            <Text style={[styles.kvValue, { color: theme.text }]}>{result.roiLabel}</Text>
-          </View>
+          {durationError ? <Text accessibilityRole="alert" style={[styles.body, { color: theme.danger }]}>{durationError}</Text> : null}
+          <DateField label="Deposit start date" value={fc.startDate} onChange={actions.fcSet('startDate')} />
+          <FormSelect label="How often is interest added?" value={fc.compounding} options={COMPOUNDING_FREQUENCIES} onChange={actions.fcSet('compounding')} />
+          <Text style={[styles.body, { color: theme.textMuted }]}>{compoundingHelp[fc.compounding]} This earns interest on earlier interest too.</Text>
         </Card>
-        <Text style={[styles.footnote, { color: theme.textFaint }]}>This scenario is independent of your saved FDs and won't affect your portfolio.</Text>
+        <CalculatorDisclosure title="Tax estimate" subtitle={errors.tax ? 'Check your deduction rate' : `Deduction rate: ${fc.tdsPercent}% · edit assumption`} open={advanced || !!errors.tax} onPress={() => setAdvanced(!advanced)}>
+          <FormField label="Estimated deduction on interest (%)" accessibilityLabel="Estimated deduction on interest in percent" value={String(fc.tdsPercent)} onChangeText={actions.fcSet('tdsPercent')} keyboardType="decimal-pad" error={errors.tax} style={styles.input} />
+          <Text style={[styles.body, { color: theme.textMuted }]}>Applied to interest only. This is a planning assumption; TDS and your final tax can differ.</Text>
+        </CalculatorDisclosure>
+        {result ? <>
+          <Card style={styles.section}>
+            <SectionHeading title="After your estimated deduction" />
+            <CalculatorMetric label="Deduction on interest" value={formatINR(result.compoundInterest - result.afterTaxInterest)} />
+            <CalculatorMetric label="Interest after deduction" value={formatINR(result.afterTaxInterest)} highlight />
+            <CalculatorMetric label="Total after deduction" value={formatINR(Number(fc.principal) + result.afterTaxInterest)} />
+          </Card>
+          <CalculatorDisclosure title="Simple vs compound interest" subtitle="See the difference reinvesting interest makes" open={comparison} onPress={() => setComparison(!comparison)}>
+            <SectionHeading title="Simple interest" subtitle="Interest is earned only on your original deposit." />
+            <CalculatorMetric label="Interest earned" value={formatINR(result.simpleInterest)} />
+            <CalculatorMetric label="Maturity value" value={formatINR(result.simpleMaturity)} />
+            <SectionHeading title="Compound interest" subtitle="Interest is reinvested and earns more interest." />
+            <CalculatorMetric label="Interest earned" value={formatINR(result.compoundInterest)} highlight />
+            <CalculatorMetric label="Maturity value" value={formatINR(result.compoundMaturity)} />
+            <CalculatorMetric label="Extra interest from compounding" value={formatINR(result.compoundInterest - result.simpleInterest)} highlight />
+          </CalculatorDisclosure>
+          <CalculatorDisclosure title="More about your returns" subtitle="Annual yield and average interest earned" open={insights} onPress={() => setInsights(!insights)}>
+            <CalculatorMetric label="Effective annual yield" value={`${result.effectiveYield.toFixed(2)}%`} />
+            <CalculatorMetric label="Return over the full duration" value={`${result.roi.toFixed(2)}%`} />
+            <CalculatorMetric label="Average interest per month" value={formatINR(result.interestPerMonth)} />
+            <CalculatorMetric label="Average interest per quarter" value={formatINR(result.interestPerQuarter)} />
+            <CalculatorMetric label="Average interest per year" value={formatINR(result.interestPerYear)} />
+            <Text style={[styles.body, { color: theme.textMuted }]}>Annual yield includes compounding. Interest averages spread your total earnings across the duration; they are not scheduled payouts.</Text>
+          </CalculatorDisclosure>
+        </> : <CalculatorEmpty />}
+        <Text style={[styles.body, { color: theme.textMuted }]}>For planning only. Actual bank returns may vary. Trying this calculator does not change your saved deposits.</Text>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 14,
-  },
-  section: {
-    gap: 12,
-  },
-  sectionLabel: {
-    fontFamily: fontFamily.semibold,
-    fontSize: 13,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  row3: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  flex1: {
-    flex: 1,
-    minWidth: 0,
-  },
-  resultHeaderRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  colHeader: {
-    fontFamily: fontFamily.semibold,
-    fontSize: 12.5,
-  },
-  metricCol: {
-    flex: 1.4,
-  },
-  valCol: {
-    flex: 1,
-  },
-  resultRow: {
-    flexDirection: 'row',
-    paddingVertical: 6,
-  },
-  rowLabel: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12.5,
-  },
-  rowValue: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12.5,
-  },
-  rowValueBold: {
-    fontFamily: fontFamily.semibold,
-    fontSize: 12.5,
-  },
-  kvRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  kvLabel: {
-    fontFamily: fontFamily.regular,
-    fontSize: 13,
-  },
-  kvValue: {
-    fontFamily: fontFamily.medium,
-    fontSize: 13,
-  },
-  footnote: {
-    fontFamily: fontFamily.regular,
-    fontSize: 11.5,
-    lineHeight: 17,
-  },
-});
