@@ -1,7 +1,7 @@
 // @refresh reset
 // Remount local form state after development edits; draft values live in AppContext.
-import React, { useMemo, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import LinearGradient from 'react-native-linear-gradient';
@@ -64,6 +64,9 @@ export default function AddEditFdScreen({ route }: Props) {
   const insets = useSafeAreaInsets();
   const scroll = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const [step, setStep] = useState(0);
+  const transition = useRef(new Animated.Value(1)).current;
+  const direction = useRef(1);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [payoutOpen, setPayoutOpen] = useState(false);
@@ -79,15 +82,48 @@ export default function AddEditFdScreen({ route }: Props) {
   const [attempted, setAttempted] = useState(false);
   const errorFor = (field: string) => (attempted || touched[field] ? errors[field] : undefined);
 
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(enabled => {
+        if (active) setReduceMotion(enabled);
+      })
+      .catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (reduceMotion) {
+      transition.stopAnimation();
+      transition.setValue(1);
+      return;
+    }
+    const animation = Animated.timing(transition, {
+      toValue: 1,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [step, reduceMotion, transition]);
+
   const set = (field: string) => (value: string) => {
     setTouched(t => (t[field] ? t : { ...t, [field]: true }));
     actions.setDraftField(field, value);
   };
 
   const goToStep = (next: number) => {
+    if (next === step) return;
     Keyboard.dismiss();
+    direction.current = next > step ? 1 : -1;
+    transition.stopAnimation();
+    transition.setValue(reduceMotion ? 1 : 0);
     setStep(next);
-    scroll.current?.scrollTo({ y: 0, animated: false });
   };
 
   const handleContinue = () => {
@@ -138,195 +174,213 @@ export default function AddEditFdScreen({ route }: Props) {
             </Pressable>
           ))}
         </View>
-        <ScrollView
-          ref={scroll}
-          contentContainerStyle={styles.container}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        >
-          <View>
-            <Text style={[styles.pageTitle, { color: theme.text }]}>{['Build your deposit', 'Make it yours', 'Review your FD'][step]}</Text>
-            <Text style={[styles.helper, { color: theme.textMuted }]}>
+        <View style={styles.stepViewport}>
+          <Animated.View
+            style={[
+              styles.flex,
               {
-                [
-                  'Start with the amount, rate and duration.',
-                  'Add holders and any extra details from your bank.',
-                  'Check your estimate and how your interest is paid.',
-                ][step]
-              }
-            </Text>
-          </View>
-          {step === 0 && (
-            <>
-              <Card style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: theme.text }]}>Your deposit</Text>
-                <FormSelect
-                  label="Bank"
-                  value={draft.bankName ?? ''}
-                  options={BANKS}
-                  onChange={set('bankName')}
-                  placeholder="Select bank"
-                  renderOptionIcon={bank => <BankLogo bankName={bank} size={28} />}
-                  error={errorFor('bankName')}
-                />
-                <FormField label="FD number" value={String(draft.fdNumber ?? '')} onChangeText={set('fdNumber')} error={errorFor('fdNumber')} />
-                <FormField
-                  label="Principal amount (₹)"
-                  value={String(draft.principalAmount ?? '')}
-                  onChangeText={set('principalAmount')}
-                  keyboardType="numeric"
-                  error={errorFor('principalAmount')}
-                />
-                <DateField label="Start date" value={String(draft.startDate ?? '')} onChange={set('startDate')} />
-              </Card>
-
-              <Card style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: theme.text }]}>Duration &amp; rate</Text>
-                <View style={styles.row3}>
-                  <View style={styles.flex1}>
-                    <FormField
-                      label="Years"
-                      value={String(draft.tenureYears ?? '')}
-                      onChangeText={set('tenureYears')}
-                      keyboardType="numeric"
-                      error={errorFor('tenureYears')}
+                opacity: transition,
+                transform: [{ translateX: transition.interpolate({ inputRange: [0, 1], outputRange: [direction.current * 28, 0] }) }],
+              },
+            ]}
+          >
+            <ScrollView
+              key={step}
+              ref={scroll}
+              contentContainerStyle={styles.container}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
+              <View>
+                <Text style={[styles.pageTitle, { color: theme.text }]}>{['Build your deposit', 'Make it yours', 'Review your FD'][step]}</Text>
+                <Text style={[styles.helper, { color: theme.textMuted }]}>
+                  {
+                    [
+                      'Start with the amount, rate and duration.',
+                      'Add holders and any extra details from your bank.',
+                      'Check your estimate and how your interest is paid.',
+                    ][step]
+                  }
+                </Text>
+              </View>
+              {step === 0 && (
+                <>
+                  <Card style={styles.section}>
+                    <Text style={[styles.sectionLabel, { color: theme.text }]}>Your deposit</Text>
+                    <FormSelect
+                      label="Bank"
+                      value={draft.bankName ?? ''}
+                      options={BANKS}
+                      onChange={set('bankName')}
+                      placeholder="Select bank"
+                      renderOptionIcon={bank => <BankLogo bankName={bank} size={28} />}
+                      error={errorFor('bankName')}
                     />
-                  </View>
-                  <View style={styles.flex1}>
-                    <FormField label="Months" value={String(draft.tenureMonths ?? '')} onChangeText={set('tenureMonths')} keyboardType="numeric" />
-                  </View>
-                  <View style={styles.flex1}>
-                    <FormField label="Days" value={String(draft.tenureDays ?? '')} onChangeText={set('tenureDays')} keyboardType="numeric" />
-                  </View>
-                </View>
-                <FormField
-                  label="Interest rate (% p.a.)"
-                  value={String(draft.interestRate ?? '')}
-                  onChangeText={set('interestRate')}
-                  keyboardType="numeric"
-                  error={errorFor('interestRate')}
-                />
-              </Card>
-            </>
-          )}
+                    <FormField label="FD number" value={String(draft.fdNumber ?? '')} onChangeText={set('fdNumber')} error={errorFor('fdNumber')} />
+                    <FormField
+                      label="Principal amount (₹)"
+                      value={String(draft.principalAmount ?? '')}
+                      onChangeText={set('principalAmount')}
+                      keyboardType="numeric"
+                      error={errorFor('principalAmount')}
+                    />
+                    <DateField label="Start date" value={String(draft.startDate ?? '')} onChange={set('startDate')} />
+                  </Card>
 
-          {step === 1 && (
-            <>
-              <Card style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: theme.text }]}>Holders</Text>
-                <FormField label="FD holder name" value={String(draft.fdHolderName ?? '')} onChangeText={set('fdHolderName')} />
-                <FormField label="Joint holder (optional)" value={String(draft.jointHolder ?? '')} onChangeText={set('jointHolder')} />
-              </Card>
-              <ExpandableSection
-                title="Bank details"
-                summary="Optional · Branch, account number and customer ID"
-                open={bankOpen}
-                onToggle={() => setBankOpen(!bankOpen)}
-              >
-                <FormField label="Branch" value={String(draft.branch ?? '')} onChangeText={set('branch')} />
-                <FormField
-                  label="Bank account number"
-                  value={String(draft.bankAccountNumber ?? '')}
-                  onChangeText={set('bankAccountNumber')}
-                  keyboardType="number-pad"
-                />
-                <FormField label="Customer ID" value={String(draft.customerId ?? '')} onChangeText={set('customerId')} />
-              </ExpandableSection>
-              <ExpandableSection
-                title="Deposit options"
-                summary={`${draft.fdType ?? FD_TYPES[0]} · ${draft.mode ?? 'Online'} · ${draft.interestType ?? 'Compound'} interest`}
-                open={depositOpen}
-                onToggle={() => setDepositOpen(!depositOpen)}
-              >
-                <FormSelect label="FD type" value={draft.fdType ?? FD_TYPES[0]} options={FD_TYPES} onChange={set('fdType')} />
-                <FormSelect label="Mode" value={draft.mode ?? 'Online'} options={['Online', 'Offline']} onChange={set('mode')} />
-                <DateField label="Deposit date" value={String(draft.depositDate ?? '')} onChange={set('depositDate')} error={errorFor('depositDate')} />
-                <FormSelect label="Interest type" value={draft.interestType ?? 'Compound'} options={['Simple', 'Compound']} onChange={set('interestType')} />
-                <FormSelect
-                  label="Compounding frequency"
-                  value={draft.compoundingFrequency ?? COMPOUNDING_FREQUENCIES[0]}
-                  options={COMPOUNDING_FREQUENCIES}
-                  onChange={set('compoundingFrequency')}
-                />
-              </ExpandableSection>
-            </>
-          )}
+                  <Card style={styles.section}>
+                    <Text style={[styles.sectionLabel, { color: theme.text }]}>Duration &amp; rate</Text>
+                    <View style={styles.row3}>
+                      <View style={styles.flex1}>
+                        <FormField
+                          label="Years"
+                          value={String(draft.tenureYears ?? '')}
+                          onChangeText={set('tenureYears')}
+                          keyboardType="numeric"
+                          error={errorFor('tenureYears')}
+                        />
+                      </View>
+                      <View style={styles.flex1}>
+                        <FormField label="Months" value={String(draft.tenureMonths ?? '')} onChangeText={set('tenureMonths')} keyboardType="numeric" />
+                      </View>
+                      <View style={styles.flex1}>
+                        <FormField label="Days" value={String(draft.tenureDays ?? '')} onChangeText={set('tenureDays')} keyboardType="numeric" />
+                      </View>
+                    </View>
+                    <FormField
+                      label="Interest rate (% p.a.)"
+                      value={String(draft.interestRate ?? '')}
+                      onChangeText={set('interestRate')}
+                      keyboardType="numeric"
+                      error={errorFor('interestRate')}
+                    />
+                  </Card>
+                </>
+              )}
 
-          {step === 2 && (
-            <>
-              <LinearGradient colors={theme.gradientCalc.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.estimateCard}>
-                <Text style={[styles.estimateLabel, { color: theme.textMuted }]}>Estimated maturity amount</Text>
-                <Text style={[styles.estimateAmount, { color: theme.text }]}>
-                  {isValidDraft(errors) ? estimate.maturityAmountFmt : 'Complete deposit details'}
-                </Text>
-                <Text style={[styles.helper, { color: theme.textMuted }]}>
-                  {isValidDraft(errors) ? `Matures on ${estimate.maturityDateLabel}` : 'An estimate will appear once your deposit is valid.'}
-                </Text>
-              </LinearGradient>
-              <Card style={styles.section}>
-                <View style={styles.disclosure}>
-                  <View style={styles.flex1}>
-                    <Text style={[styles.sectionLabel, { color: theme.text }]}>{draft.bankName || 'Select a bank'}</Text>
-                    <Text style={[styles.helper, { color: theme.textMuted }]}>
-                      {draft.fdNumber || 'FD number'} · {draft.fdHolderName || 'Holder not specified'}
+              {step === 1 && (
+                <>
+                  <Card style={styles.section}>
+                    <Text style={[styles.sectionLabel, { color: theme.text }]}>Holders</Text>
+                    <FormField label="FD holder name" value={String(draft.fdHolderName ?? '')} onChangeText={set('fdHolderName')} />
+                    <FormField label="Joint holder (optional)" value={String(draft.jointHolder ?? '')} onChangeText={set('jointHolder')} />
+                  </Card>
+                  <ExpandableSection
+                    title="Bank details"
+                    summary="Optional · Branch, account number and customer ID"
+                    open={bankOpen}
+                    onToggle={() => setBankOpen(!bankOpen)}
+                  >
+                    <FormField label="Branch" value={String(draft.branch ?? '')} onChangeText={set('branch')} />
+                    <FormField
+                      label="Bank account number"
+                      value={String(draft.bankAccountNumber ?? '')}
+                      onChangeText={set('bankAccountNumber')}
+                      keyboardType="number-pad"
+                    />
+                    <FormField label="Customer ID" value={String(draft.customerId ?? '')} onChangeText={set('customerId')} />
+                  </ExpandableSection>
+                  <ExpandableSection
+                    title="Deposit options"
+                    summary={`${draft.fdType ?? FD_TYPES[0]} · ${draft.mode ?? 'Online'} · ${draft.interestType ?? 'Compound'} interest`}
+                    open={depositOpen}
+                    onToggle={() => setDepositOpen(!depositOpen)}
+                  >
+                    <FormSelect label="FD type" value={draft.fdType ?? FD_TYPES[0]} options={FD_TYPES} onChange={set('fdType')} />
+                    <FormSelect label="Mode" value={draft.mode ?? 'Online'} options={['Online', 'Offline']} onChange={set('mode')} />
+                    <DateField label="Deposit date" value={String(draft.depositDate ?? '')} onChange={set('depositDate')} error={errorFor('depositDate')} />
+                    <FormSelect
+                      label="Interest type"
+                      value={draft.interestType ?? 'Compound'}
+                      options={['Simple', 'Compound']}
+                      onChange={set('interestType')}
+                    />
+                    <FormSelect
+                      label="Compounding frequency"
+                      value={draft.compoundingFrequency ?? COMPOUNDING_FREQUENCIES[0]}
+                      options={COMPOUNDING_FREQUENCIES}
+                      onChange={set('compoundingFrequency')}
+                    />
+                  </ExpandableSection>
+                </>
+              )}
+
+              {step === 2 && (
+                <>
+                  <LinearGradient colors={theme.gradientCalc.colors} start={GRADIENT_ANGLE.start} end={GRADIENT_ANGLE.end} style={styles.estimateCard}>
+                    <Text style={[styles.estimateLabel, { color: theme.textMuted }]}>Estimated maturity amount</Text>
+                    <Text style={[styles.estimateAmount, { color: theme.text }]}>
+                      {isValidDraft(errors) ? estimate.maturityAmountFmt : 'Complete deposit details'}
                     </Text>
-                  </View>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Edit deposit details" onPress={() => goToStep(0)} style={styles.editButton}>
-                    <Text style={[styles.stepText, { color: theme.accent }]}>Edit</Text>
-                  </Pressable>
-                </View>
-                <View style={[styles.summaryRow, { borderTopColor: theme.divider }]}>
-                  <View style={styles.flex1}>
-                    <Text style={[styles.helper, { color: theme.textMuted }]}>Principal</Text>
-                    <Text style={[styles.summaryValue, { color: theme.text }]}>{formatINR(Number(draft.principalAmount) || 0)}</Text>
-                  </View>
-                  <View style={styles.flex1}>
-                    <Text style={[styles.helper, { color: theme.textMuted }]}>Interest rate</Text>
-                    <Text style={[styles.summaryValue, { color: theme.text }]}>{draft.interestRate || 0}% p.a.</Text>
-                  </View>
-                </View>
-                <Text style={[styles.helper, { color: theme.textMuted }]}>
-                  {Number(draft.tenureYears) || 0} years · {Number(draft.tenureMonths) || 0} months · {Number(draft.tenureDays) || 0} days
-                </Text>
-              </Card>
-              <ExpandableSection
-                title="Interest payout"
-                summary={`${draft.interestPayoutMode ?? PAYOUT_FREQUENCIES[0]} · ${draft.interestCreditMethod ?? CREDIT_METHODS[0]}`}
-                open={payoutOpen}
-                onToggle={() => setPayoutOpen(!payoutOpen)}
-              >
-                <FormSelect
-                  label="Interest payout frequency"
-                  value={draft.interestPayoutMode ?? PAYOUT_FREQUENCIES[0]}
-                  options={PAYOUT_FREQUENCIES}
-                  onChange={set('interestPayoutMode')}
-                />
-                <FormSelect
-                  label="Interest credit method"
-                  value={draft.interestCreditMethod ?? CREDIT_METHODS[0]}
-                  options={CREDIT_METHODS}
-                  onChange={set('interestCreditMethod')}
-                />
-              </ExpandableSection>
+                    <Text style={[styles.helper, { color: theme.textMuted }]}>
+                      {isValidDraft(errors) ? `Matures on ${estimate.maturityDateLabel}` : 'An estimate will appear once your deposit is valid.'}
+                    </Text>
+                  </LinearGradient>
+                  <Card style={styles.section}>
+                    <View style={styles.disclosure}>
+                      <View style={styles.flex1}>
+                        <Text style={[styles.sectionLabel, { color: theme.text }]}>{draft.bankName || 'Select a bank'}</Text>
+                        <Text style={[styles.helper, { color: theme.textMuted }]}>
+                          {draft.fdNumber || 'FD number'} · {draft.fdHolderName || 'Holder not specified'}
+                        </Text>
+                      </View>
+                      <Pressable accessibilityRole="button" accessibilityLabel="Edit deposit details" onPress={() => goToStep(0)} style={styles.editButton}>
+                        <Text style={[styles.stepText, { color: theme.accent }]}>Edit</Text>
+                      </Pressable>
+                    </View>
+                    <View style={[styles.summaryRow, { borderTopColor: theme.divider }]}>
+                      <View style={styles.flex1}>
+                        <Text style={[styles.helper, { color: theme.textMuted }]}>Principal</Text>
+                        <Text style={[styles.summaryValue, { color: theme.text }]}>{formatINR(Number(draft.principalAmount) || 0)}</Text>
+                      </View>
+                      <View style={styles.flex1}>
+                        <Text style={[styles.helper, { color: theme.textMuted }]}>Interest rate</Text>
+                        <Text style={[styles.summaryValue, { color: theme.text }]}>{draft.interestRate || 0}% p.a.</Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.helper, { color: theme.textMuted }]}>
+                      {Number(draft.tenureYears) || 0} years · {Number(draft.tenureMonths) || 0} months · {Number(draft.tenureDays) || 0} days
+                    </Text>
+                  </Card>
+                  <ExpandableSection
+                    title="Interest payout"
+                    summary={`${draft.interestPayoutMode ?? PAYOUT_FREQUENCIES[0]} · ${draft.interestCreditMethod ?? CREDIT_METHODS[0]}`}
+                    open={payoutOpen}
+                    onToggle={() => setPayoutOpen(!payoutOpen)}
+                  >
+                    <FormSelect
+                      label="Interest payout frequency"
+                      value={draft.interestPayoutMode ?? PAYOUT_FREQUENCIES[0]}
+                      options={PAYOUT_FREQUENCIES}
+                      onChange={set('interestPayoutMode')}
+                    />
+                    <FormSelect
+                      label="Interest credit method"
+                      value={draft.interestCreditMethod ?? CREDIT_METHODS[0]}
+                      options={CREDIT_METHODS}
+                      onChange={set('interestCreditMethod')}
+                    />
+                  </ExpandableSection>
 
-              <ExpandableSection
-                title="Renewal"
-                summary={`Auto-renew: ${draft.autoRenewal ?? 'No'} · ${draft.renewalOption ?? 'Do Not Renew'}`}
-                open={renewalOpen}
-                onToggle={() => setRenewalOpen(!renewalOpen)}
-              >
-                <FormSelect label="Auto-renew" value={draft.autoRenewal ?? 'No'} options={['Yes', 'No']} onChange={set('autoRenewal')} />
-                <FormSelect
-                  label="Renewal instruction"
-                  value={draft.renewalOption ?? 'Do Not Renew'}
-                  options={['Do Not Renew', 'Renew Principal Only', 'Renew Principal + Interest']}
-                  onChange={set('renewalOption')}
-                />
-              </ExpandableSection>
-            </>
-          )}
-        </ScrollView>
+                  <ExpandableSection
+                    title="Renewal"
+                    summary={`Auto-renew: ${draft.autoRenewal ?? 'No'} · ${draft.renewalOption ?? 'Do Not Renew'}`}
+                    open={renewalOpen}
+                    onToggle={() => setRenewalOpen(!renewalOpen)}
+                  >
+                    <FormSelect label="Auto-renew" value={draft.autoRenewal ?? 'No'} options={['Yes', 'No']} onChange={set('autoRenewal')} />
+                    <FormSelect
+                      label="Renewal instruction"
+                      value={draft.renewalOption ?? 'Do Not Renew'}
+                      options={['Do Not Renew', 'Renew Principal Only', 'Renew Principal + Interest']}
+                      onChange={set('renewalOption')}
+                    />
+                  </ExpandableSection>
+                </>
+              )}
+            </ScrollView>
+          </Animated.View>
+        </View>
         <View style={[styles.footer, { backgroundColor: theme.bg, borderTopColor: theme.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
           {step > 0 && (
             <Pressable accessibilityRole="button" onPress={() => goToStep(step - 1)} style={[styles.previousButton, { borderColor: theme.borderStrong }]}>
@@ -350,6 +404,7 @@ export default function AddEditFdScreen({ route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  stepViewport: { flex: 1, overflow: 'hidden' },
   container: {
     padding: 16,
     paddingBottom: 24,
